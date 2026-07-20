@@ -1,0 +1,32 @@
+{
+  "name": "kwh-payments-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React operator dashboard for the KWH payments Playwright suite. Live test feed with responsive desktop / mobile layouts and a global stop button.",
+  "scripts": {
+    "dev": "concurrently -k -n vite,server -c cyan,magenta \"vite\" \"tsx watch server/index.ts\"",
+    "build": "vite build",
+    "server": "tsx server/index.ts",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.8"
+  }
+}

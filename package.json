@@ -1,0 +1,46 @@
+{
+  "name": "kwh-payments-staging",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright end-to-end tests for KWH Next.js staging site payment flows (Cybersource CC, PayPal, Afterpay, Google Pay).",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:chromium": "playwright test --project=chromium-desktop",
+    "test:webkit": "playwright test --project=safari-desktop",
+    "test:mobile-safari": "playwright test --project=mobile-safari",
+    "test:android": "playwright test --project=android-chrome",
+    "test:cc": "playwright test tests/payments/credit-card.spec.ts",
+    "test:paypal": "playwright test tests/payments/paypal.spec.ts",
+    "test:afterpay": "playwright test tests/payments/afterpay.spec.ts",
+    "test:gpay": "playwright test tests/payments/gpay.spec.ts",
+    "report": "playwright show-report",
+    "codegen": "playwright codegen",
+    "install-browsers": "playwright install --with-deps",
+    "auth:setup": "tsx tests/scripts/interactive-signin.ts",
+    "runner:install": "npm --prefix runner install",
+    "runner:dev": "npm --prefix runner run dev",
+    "runner:build": "npm --prefix runner run build",
+    "runner:server": "npm --prefix runner run server",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "dotenv": "^16.4.5",
+    "eslint": "^9.12.0",
+    "eslint-plugin-playwright": "^2.0.0",
+    "prettier": "^3.3.3",
+    "tsx": "^4.23.1",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
