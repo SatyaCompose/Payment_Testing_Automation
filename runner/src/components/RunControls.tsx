@@ -26,6 +26,7 @@ const INITIAL_SCOPE: TestScope = { paymentMethod: '', section: 0, subtest: '' };
 
 export function RunControls({ status, auth, paused, onStart, onStop, onPause, onResume, compact }: Props) {
   const [headed, setHeaded] = useState(true);
+  const [recordVideo, setRecordVideo] = useState(false);
   const [slowMoMs, setSlowMoMs] = useState(0);
   const [project, setProject] = useState<string>(PROJECTS[0].value);
   const [scope, setScope] = useState<TestScope>(INITIAL_SCOPE);
@@ -102,6 +103,16 @@ export function RunControls({ status, auth, paused, onStart, onStop, onPause, on
         Show browser windows (headed)
       </label>
 
+      <label className="flex items-center gap-2 text-sm text-slate-200">
+        <input
+          type="checkbox"
+          checked={recordVideo}
+          onChange={(e) => setRecordVideo(e.target.checked)}
+          className="h-4 w-4 accent-accent"
+        />
+        Record video of every test
+      </label>
+
       <label className="flex flex-col gap-1 text-xs text-slate-400">
         <span>
           Slow-mo: <b className="text-slate-200">{slowMoMs}ms</b> per action
@@ -139,6 +150,7 @@ export function RunControls({ status, auth, paused, onStart, onStop, onPause, on
         onClick={() =>
           onStart({
             headed,
+            recordVideo,
             slowMoMs,
             project: project || undefined,
             ...scopeToStartOptions(scope),

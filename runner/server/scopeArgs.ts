@@ -7,6 +7,8 @@ export interface StartOptions {
   paymentMethod?: string;
   section?: number;
   subtest?: string;
+  /** Record every test as WebM video (overrides retain-on-failure default). */
+  recordVideo?: boolean;
 }
 
 const PAYMENT_METHOD_SLUGS = new Set([

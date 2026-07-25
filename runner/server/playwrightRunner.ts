@@ -112,6 +112,9 @@ export class PlaywrightRunner {
     if (opts.subtest) {
       env.FORCE_RERUN = '1';
     }
+    if (opts.recordVideo) {
+      env.RECORD_VIDEO = '1';
+    }
 
     this.child = spawn('npx', args, {
       cwd: this.root,

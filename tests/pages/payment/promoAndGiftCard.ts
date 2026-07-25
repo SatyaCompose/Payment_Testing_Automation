@@ -59,37 +59,46 @@ export async function applyPromoCode(page: Page, code: string, maxAttempts = 3):
  * needs to be covered by another payment method (Credit Card in 6.2).
  */
 export async function applyGiftCard(page: Page, cardNumber: string, pin?: string): Promise<void> {
-  const tile = page
-    .locator('div, section, article, button, [role="button"], label')
-    .filter({ hasText: /^\s*gift\s*card\s*$/i })
-    .first();
-  if (!(await tile.isVisible({ timeout: 8_000 }).catch(() => false))) {
-    throw new Error('Gift Card tile is not visible on the payment step');
+  // KWH renders the gift-card option as a checkbox row that wraps the
+  // label ("Gift Card"), icon, input for the code, and Apply button.
+  // The checkbox IS the tile — clicking it expands the row and reveals
+  // the input + Apply button as interactive controls.
+  const giftCardCheckbox = page.getByRole('checkbox', { name: /gift\s*card/i }).first();
+  if (!(await giftCardCheckbox.isVisible({ timeout: 8_000 }).catch(() => false))) {
+    throw new Error('Gift Card option is not visible on the payment step');
   }
-  await tile.scrollIntoViewIfNeeded().catch(() => undefined);
-  await tile.click({ force: true });
+  await giftCardCheckbox.scrollIntoViewIfNeeded().catch(() => undefined);
+  if (!(await giftCardCheckbox.isChecked().catch(() => false))) {
+    await giftCardCheckbox.check({ force: true }).catch(async () => {
+      await giftCardCheckbox.click({ force: true });
+    });
+  }
 
-  // The expanded tile now contains the input + Apply button. Scope to
-  // the tile so we don't grab the promo-code input from Order Summary.
-  const gcInput = tile
-    .getByLabel(/gift\s*card(?:\s*code)?/i)
-    .or(tile.getByPlaceholder(/gift\s*card\s*code|enter (your )?gift\s*card/i))
-    .or(page.getByPlaceholder(/gift\s*card\s*code/i))
+  // Scope subsequent input + Apply lookups to the innermost row container
+  // that holds BOTH the gift-card checkbox and an Apply button — this
+  // pins us to the gift-card row and away from the promo-code row in
+  // Order Summary (which also has an Apply button).
+  const giftCardRow = page
+    .locator('label, div, fieldset, li, section')
+    .filter({ has: page.getByRole('checkbox', { name: /gift\s*card/i }) })
+    .filter({ has: page.getByRole('button', { name: /^\s*apply\s*$/i }) })
+    .last();
+
+  const gcInput = giftCardRow
+    .getByRole('textbox', { name: /gift\s*card(?:\s*code)?/i })
+    .or(giftCardRow.getByPlaceholder(/gift\s*card\s*code|enter (your )?gift\s*card/i))
     .first();
   await gcInput.waitFor({ state: 'visible', timeout: 6_000 });
   await gcInput.fill(cardNumber);
 
   if (pin) {
-    const pinInput = tile.getByLabel(/pin/i).or(page.getByLabel(/gift\s*card\s*pin/i)).first();
+    const pinInput = giftCardRow.getByLabel(/pin/i).first();
     if (await pinInput.isVisible({ timeout: 1_500 }).catch(() => false)) {
       await pinInput.fill(pin);
     }
   }
 
-  const applyBtn = tile
-    .getByRole('button', { name: /^\s*apply\s*$/i })
-    .or(tile.locator('button, [role="button"]').filter({ hasText: /^\s*apply\s*$/i }))
-    .first();
+  const applyBtn = giftCardRow.getByRole('button', { name: /^\s*apply\s*$/i }).first();
   await applyBtn.click({ force: true });
 
   await expect(

@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { randomKitchenSearchTerm } from '../../fixtures/testData';
 import { handleAgeRestrictionCheckbox, Logger } from './ageRestriction';
+import { dismissInsiderOverlay, installInsiderKiller } from './insiderOverlay';
 
 export type WaitForLoadingOverlay = () => Promise<void>;
 export type Goto = (path?: string) => Promise<void>;
@@ -54,8 +55,14 @@ async function doAddRandomProductFromSearch(
   term: string,
   opts: SearchAddOptions,
 ): Promise<string> {
+  // Install the MutationObserver-based Insider killer on this page's
+  // next navigation (idempotent per Page). Then do the goto — the init
+  // script runs on the new document and starts nuking Insider nodes as
+  // they're injected, whether pre-render or via a scroll/timer trigger.
+  await installInsiderKiller(page);
   log(`STEP 1/6 · goto home, prepare to search for "${term}"`);
   await goto('/');
+  await dismissInsiderOverlay(page, log);
 
   log('STEP 2/6 · locating the searchbox');
   const searchbox = page
@@ -70,6 +77,7 @@ async function doAddRandomProductFromSearch(
   await page.keyboard.press('Enter');
   await page.waitForLoadState('domcontentloaded');
   await waitForOverlay();
+  await dismissInsiderOverlay(page, log);
   log(`  → results URL: ${page.url()}`);
 
   if (opts.filterExpressOnly) {

@@ -38,7 +38,7 @@ export default defineConfig({
     baseURL: STAGING_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: process.env.RECORD_VIDEO === '1' ? 'on' : 'retain-on-failure',
     actionTimeout: 20_000,
     navigationTimeout: 45_000,
     ignoreHTTPSErrors: true,

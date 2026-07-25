@@ -13,6 +13,8 @@ export interface StartOptions {
   section?: number;
   /** Sub-test id like "1.2" or "6.1". */
   subtest?: string;
+  /** Record every test as WebM video (overrides retain-on-failure default). */
+  recordVideo?: boolean;
 }
 
 export interface UseTestStream {
