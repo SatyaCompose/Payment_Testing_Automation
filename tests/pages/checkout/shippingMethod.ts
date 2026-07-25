@@ -143,28 +143,54 @@ export async function selectShippingMethod(
       return;
     }
     // Diagnostic dump: our "is selected" heuristic missed the KWH indicator.
-    // Log the shipping-card DOM so the trace reveals the real attribute/class
-    // to add to `readCurrentlySelectedCardText` / `verifyShippingSelection`.
-    const diagnostic = await page.evaluate((tgt) => {
-      const cards = Array.from(
-        document.querySelectorAll(
-          '[role="radio"], [role="radiogroup"] > *, label, article, li, div',
-        ),
-      )
+    // Only surface leaf-ish nodes whose text closely matches a card (short
+    // text length) plus any form inputs whose name/value refers to shipping.
+    const diagnostic = await page.evaluate(() => {
+      const methodRe = /standard shipping|express shipping|international shipping|click.?and.?collect/i;
+      const cards = Array.from(document.querySelectorAll('*'))
         .filter((el) => {
-          const t = (el.textContent || '').toLowerCase();
-          return /standard shipping|express shipping|international shipping|click.?and.?collect/.test(t);
+          const t = (el.textContent || '').trim();
+          return (
+            t.length > 0 &&
+            t.length < 180 &&
+            methodRe.test(t) &&
+            // exclude wrappers where a child already contains the same match
+            !Array.from(el.children).some((c) => methodRe.test((c.textContent || '').trim()))
+          );
         })
-        .slice(0, 6);
-      return cards.map((el) => ({
-        tag: el.tagName.toLowerCase(),
-        text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60),
-        attrs: Array.from(el.attributes)
-          .map((a) => `${a.name}="${a.value.slice(0, 60)}"`)
-          .join(' '),
-        childRadioChecked: !!el.querySelector('input[type="radio"]:checked'),
-      }));
-    }, target).catch(() => []);
+        .slice(0, 8);
+      const inputs = Array.from(document.querySelectorAll('input, [role="radio"], [data-state]'))
+        .filter((el) => {
+          const name = el.getAttribute('name') || el.getAttribute('aria-label') || '';
+          const val = (el as HTMLInputElement).value || '';
+          const parentTxt = ((el.closest('label, [role="radio"], article, li') || el).textContent || '').slice(0, 200);
+          return (
+            /ship|delivery|collect/i.test(name) ||
+            /ship|delivery|collect/i.test(parentTxt) ||
+            /despatch|express|standard/i.test(val)
+          );
+        })
+        .slice(0, 8);
+      const attrsOf = (el: Element) =>
+        Array.from(el.attributes).map((a) => `${a.name}="${a.value.slice(0, 80)}"`).join(' ');
+      return {
+        cards: cards.map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80),
+          attrs: attrsOf(el),
+        })),
+        inputs: inputs.map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          type: (el as HTMLInputElement).type || null,
+          name: el.getAttribute('name'),
+          value: (el as HTMLInputElement).value || null,
+          checked: (el as HTMLInputElement).checked ?? null,
+          ariaChecked: el.getAttribute('aria-checked'),
+          dataState: el.getAttribute('data-state'),
+          attrs: attrsOf(el),
+        })),
+      };
+    }).catch(() => ({ cards: [], inputs: [] }));
     log(`  ! shipping-card DOM dump: ${JSON.stringify(diagnostic)}`);
     throw new Error(
       `Wrong shipping method selected. Expected "${target}", but currently selected card is "${verdict.selectedText}". Reason: ${verdict.reason}`,

@@ -41,18 +41,18 @@ export async function visibleOtherLabels(page: Page, others: string[]): Promise<
  */
 export async function readCurrentlySelectedCardText(page: Page): Promise<string> {
   return page.evaluate(() => {
-    const candidates = Array.from(
-      document.querySelectorAll('button, [role="button"], [role="radio"], [tabindex], label'),
+    // KWH renders each shipping-method card as a <label> wrapping an
+    // <input type="checkbox" class="sr-only">. The visible checkmark
+    // badge is driven by whichever checkbox is :checked. That's the only
+    // reliable selection marker on the page.
+    const methodRe = /standard shipping|express shipping|international shipping|click.?and.?collect/i;
+    const labels = Array.from(document.querySelectorAll('label')) as HTMLLabelElement[];
+    const selected = labels.find(
+      (l) =>
+        methodRe.test((l.textContent || '')) &&
+        !!l.querySelector('input[type="checkbox"]:checked'),
     );
-    const hit = candidates.find((c) => {
-      return (
-        c.getAttribute('aria-checked') === 'true' ||
-        c.getAttribute('data-selected') !== null ||
-        /(^|\s)selected(\s|$)/i.test(c.getAttribute('class') || '') ||
-        c.querySelector('svg[data-selected], svg[aria-label*="check" i]') !== null
-      );
-    });
-    return (hit?.textContent || '').trim().slice(0, 60);
+    return (selected?.textContent || '').trim().slice(0, 60);
   });
 }
 
@@ -85,26 +85,21 @@ export async function verifyShippingSelection(
         };
       }
 
-      const candidates = Array.from(
-        document.querySelectorAll(
-          'button, [role="button"], [role="radio"], label, [tabindex], div, li, article',
-        ),
-      ) as HTMLElement[];
-      const selected = candidates.find((c) => {
-        if (c.getAttribute('aria-checked') === 'true') return true;
-        if (c.getAttribute('data-selected') !== null) return true;
-        const cls = c.getAttribute('class') || '';
-        if (/(^|\s)selected(\s|$)/i.test(cls)) return true;
-        if (
-          c.querySelector(
-            'svg[data-selected], svg[aria-label*="check" i], [aria-checked="true"]',
-          )
-        )
-          return true;
-        return false;
-      });
+      // KWH shipping cards are <label>-wrapped sr-only checkboxes. The
+      // reliable "is selected" signal is a :checked input inside a label
+      // whose text contains a shipping-method name.
+      const methodRe = /standard shipping|express shipping|international shipping|click.?and.?collect/i;
+      const labels = Array.from(document.querySelectorAll('label')) as HTMLLabelElement[];
+      const shippingLabels = labels.filter((l) => methodRe.test(l.textContent || ''));
+      const selected = shippingLabels.find(
+        (l) => !!l.querySelector('input[type="checkbox"]:checked, input[type="radio"]:checked'),
+      );
       if (!selected) {
-        return { ok: false, selectedText: '(none)', reason: 'no selected indicator on any card' };
+        return {
+          ok: false,
+          selectedText: '(none)',
+          reason: 'no shipping-method label wraps a :checked input',
+        };
       }
       const text = (selected.textContent || '').trim();
       const hasTarget = text.toLowerCase().includes(targetText.toLowerCase());

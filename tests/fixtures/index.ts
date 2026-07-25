@@ -60,9 +60,17 @@ function shouldSkipBecauseScreenshotExists(title: string, projectName: string): 
 
 export const test = base.extend<Fixtures, WorkerFixtures>({
   sharedContext: [
-    async ({ browser }, use) => {
+    async ({ browser }, use, workerInfo) => {
+      // We create the context manually to share it across tests, which
+      // bypasses `use.video` from playwright.config.ts. Honor the runner's
+      // "Record video" toggle (RECORD_VIDEO=1) by wiring recordVideo here.
+      const recordVideo =
+        process.env.RECORD_VIDEO === '1'
+          ? { dir: path.join(workerInfo.project.outputDir ?? 'test-results', 'videos') }
+          : undefined;
       const context = await browser.newContext({
         storageState: fs.existsSync(AUTH_FILE) ? AUTH_FILE : undefined,
+        ...(recordVideo ? { recordVideo } : {}),
       });
       // Inject a floating cursor overlay so a human watching the headed
       // browser can see exactly where the script is pointing/clicking.
