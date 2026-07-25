@@ -208,18 +208,19 @@ async function applyExpressDeliveryFilter(
   waitForOverlay: WaitForLoadingOverlay,
 ): Promise<void> {
   log('  → applying "Express delivery available" filter (Express-only run)');
-  // Match the facet label leniently — the site may spell it "Express
-  // delivery available" or "Express Delivery Available", and it may live
-  // in a <label>, <button>, or <a>.
+  // KWH renders the facet in both a desktop sidebar AND a hidden mobile
+  // drawer; a raw `.first()` picks the drawer copy and fails on click.
+  // Scope to the visible one.
   const filter = page
     .locator('label, button, [role="button"], a, [role="checkbox"]')
     .filter({ hasText: /express\s*delivery\s*available/i })
+    .filter({ visible: true })
     .first();
   if (!(await filter.count().catch(() => 0))) {
     throw new Error('No "Express delivery available" filter on the results page');
   }
   await filter.scrollIntoViewIfNeeded().catch(() => undefined);
-  await filter.click({ force: true });
+  await filter.click();
   await waitForOverlay();
   // Give the PLP a moment to swap in the filtered set.
   await page

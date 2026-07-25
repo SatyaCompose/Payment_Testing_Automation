@@ -142,6 +142,30 @@ export async function selectShippingMethod(
       log(`  ✓ ${method} is the KWH default (no explicit selection indicator) — accepting`);
       return;
     }
+    // Diagnostic dump: our "is selected" heuristic missed the KWH indicator.
+    // Log the shipping-card DOM so the trace reveals the real attribute/class
+    // to add to `readCurrentlySelectedCardText` / `verifyShippingSelection`.
+    const diagnostic = await page.evaluate((tgt) => {
+      const cards = Array.from(
+        document.querySelectorAll(
+          '[role="radio"], [role="radiogroup"] > *, label, article, li, div',
+        ),
+      )
+        .filter((el) => {
+          const t = (el.textContent || '').toLowerCase();
+          return /standard shipping|express shipping|international shipping|click.?and.?collect/.test(t);
+        })
+        .slice(0, 6);
+      return cards.map((el) => ({
+        tag: el.tagName.toLowerCase(),
+        text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60),
+        attrs: Array.from(el.attributes)
+          .map((a) => `${a.name}="${a.value.slice(0, 60)}"`)
+          .join(' '),
+        childRadioChecked: !!el.querySelector('input[type="radio"]:checked'),
+      }));
+    }, target).catch(() => []);
+    log(`  ! shipping-card DOM dump: ${JSON.stringify(diagnostic)}`);
     throw new Error(
       `Wrong shipping method selected. Expected "${target}", but currently selected card is "${verdict.selectedText}". Reason: ${verdict.reason}`,
     );
