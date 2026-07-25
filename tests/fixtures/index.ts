@@ -68,8 +68,15 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         process.env.RECORD_VIDEO === '1'
           ? { dir: path.join(workerInfo.project.outputDir ?? 'test-results', 'videos') }
           : undefined;
+      // viewport: null so the context adopts the OS window size (paired
+      // with --start-maximized in playwright.config.ts for chromium). The
+      // config's viewport doesn't reach a manually-created context, so we
+      // set it here too.
+      const isChromium = workerInfo.project.name.startsWith('chromium-') ||
+        workerInfo.project.name.startsWith('android-');
       const context = await browser.newContext({
         storageState: fs.existsSync(AUTH_FILE) ? AUTH_FILE : undefined,
+        ...(isChromium ? { viewport: null } : {}),
         ...(recordVideo ? { recordVideo } : {}),
       });
       // Inject a floating cursor overlay so a human watching the headed

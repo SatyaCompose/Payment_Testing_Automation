@@ -55,14 +55,23 @@ export default defineConfig({
       name: 'chromium-desktop',
       use: {
         ...devices['Desktop Chrome'],
-        viewport: { width: 1440, height: 900 },
+        // viewport: null tells Playwright to use the actual OS window
+        // size — combined with --start-maximized, the browser opens
+        // full-screen and the page area fills the window when the user
+        // maximises / full-screens it.
+        viewport: null,
+        launchOptions: {
+          args: ['--start-maximized'],
+        },
       },
     },
     {
       name: 'safari-desktop',
       use: {
         ...devices['Desktop Safari'],
-        viewport: { width: 1440, height: 900 },
+        // WebKit doesn't accept viewport: null; instead we ship a wider
+        // default so full-screen doesn't leave a big empty margin.
+        viewport: { width: 1680, height: 1050 },
       },
     },
     {
