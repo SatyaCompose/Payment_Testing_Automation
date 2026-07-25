@@ -61,23 +61,19 @@ function shouldSkipBecauseScreenshotExists(title: string, projectName: string): 
 export const test = base.extend<Fixtures, WorkerFixtures>({
   sharedContext: [
     async ({ browser }, use, workerInfo) => {
-      // We create the context manually to share it across tests, which
-      // bypasses `use.video` from playwright.config.ts. Honor the runner's
-      // "Record video" toggle (RECORD_VIDEO=1) by wiring recordVideo here.
-      const recordVideo =
-        process.env.RECORD_VIDEO === '1'
-          ? { dir: path.join(workerInfo.project.outputDir ?? 'test-results', 'videos') }
-          : undefined;
-      // viewport: null so the context adopts the OS window size (paired
-      // with --start-maximized in playwright.config.ts for chromium). The
-      // config's viewport doesn't reach a manually-created context, so we
-      // set it here too.
+      // When RECORD_VIDEO=1 the `page` fixture creates a fresh context
+      // per test (so each test's video can be finalized + renamed). In
+      // that mode the shared context is unused — hand back a placeholder
+      // so we don't open an extra browser window.
+      if (process.env.RECORD_VIDEO === '1') {
+        await use({} as BrowserContext);
+        return;
+      }
       const isChromium = workerInfo.project.name.startsWith('chromium-') ||
         workerInfo.project.name.startsWith('android-');
       const context = await browser.newContext({
         storageState: fs.existsSync(AUTH_FILE) ? AUTH_FILE : undefined,
-        ...(isChromium ? { viewport: null } : {}),
-        ...(recordVideo ? { recordVideo } : {}),
+        ...(isChromium ? { viewport: { width: 1920, height: 1080 } } : {}),
       });
       // Inject a floating cursor overlay so a human watching the headed
       // browser can see exactly where the script is pointing/clicking.
@@ -88,10 +84,50 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     { scope: 'worker' },
   ],
 
-  // Override Playwright's built-in `page` — instead of a fresh context/page
-  // per test, hand back the single page from the shared context. First test
-  // creates it; subsequent tests reuse. We do NOT close it in between.
-  page: async ({ sharedContext }, use) => {
+  // Override Playwright's built-in `page`:
+  // - Default mode (no video): hand back the single shared page.
+  // - RECORD_VIDEO=1: build a per-test context so `page.video()` can be
+  //   finalized and the resulting `.webm` renamed to include the date
+  //   and test id.
+  page: async ({ sharedContext, browser }, use, testInfo) => {
+    if (process.env.RECORD_VIDEO === '1') {
+      const isChromium = testInfo.project.name.startsWith('chromium-') ||
+        testInfo.project.name.startsWith('android-');
+      const videoDir = path.join(testInfo.project.outputDir ?? 'test-results', 'videos');
+      const context = await browser.newContext({
+        storageState: fs.existsSync(AUTH_FILE) ? AUTH_FILE : undefined,
+        ...(isChromium ? { viewport: { width: 1920, height: 1080 } } : {}),
+        recordVideo: {
+          dir: videoDir,
+          // Playwright's default recording resolution is very small
+          // (~800px wide) and gets upscaled during playback → blurry.
+          // Pin to 1080p so text/logos in the recording stay readable.
+          size: { width: 1920, height: 1080 },
+        },
+      });
+      await context.addInitScript(CURSOR_OVERLAY_SCRIPT);
+      const testPage = await context.newPage();
+      await use(testPage);
+      // Read the raw video path BEFORE closing (path() only resolves
+      // after close, but we grab the Video ref now so we can call it).
+      const video = testPage.video();
+      await context.close();
+      if (video) {
+        try {
+          const rawPath = await video.path();
+          const testId = testInfo.title.match(/(\d+\.\d+)/)?.[1] ?? 'unknown';
+          const date = new Date().toISOString().slice(0, 10);
+          const safeProject = testInfo.project.name.replace(/[^a-z0-9_-]/gi, '-');
+          const newName = `${date}-${testId}-${safeProject}.webm`;
+          const newPath = path.join(path.dirname(rawPath), newName);
+          fs.renameSync(rawPath, newPath);
+        } catch (err) {
+          console.warn(`[video] rename failed: ${(err as Error).message}`);
+        }
+      }
+      return;
+    }
+    // Default path: reuse the worker-scoped shared page.
     const existing = sharedContext.pages();
     const page = existing[0] ?? (await sharedContext.newPage());
     await use(page);

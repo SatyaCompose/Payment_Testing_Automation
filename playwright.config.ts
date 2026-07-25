@@ -55,11 +55,11 @@ export default defineConfig({
       name: 'chromium-desktop',
       use: {
         ...devices['Desktop Chrome'],
-        // viewport: null tells Playwright to use the actual OS window
-        // size — combined with --start-maximized, the browser opens
-        // full-screen and the page area fills the window when the user
-        // maximises / full-screens it.
-        viewport: null,
+        // Full-HD viewport so the page area fills modern monitors when
+        // the browser window is maximised. `viewport: null` would let
+        // the OS window size take over, but conflicts with the device
+        // preset's deviceScaleFactor — an explicit size sidesteps that.
+        viewport: { width: 1920, height: 1080 },
         launchOptions: {
           args: ['--start-maximized'],
         },
@@ -69,8 +69,6 @@ export default defineConfig({
       name: 'safari-desktop',
       use: {
         ...devices['Desktop Safari'],
-        // WebKit doesn't accept viewport: null; instead we ship a wider
-        // default so full-screen doesn't leave a big empty margin.
         viewport: { width: 1680, height: 1050 },
       },
     },
