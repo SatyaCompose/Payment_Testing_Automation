@@ -61,6 +61,7 @@ function registerRow(args: {
       payment: paymentMethod,
       testId: folder,
       testInfo,
+      minCartTotalAud: method.minCartTotalAud,
     });
     expect(orderNumber).not.toBe('');
   });

@@ -280,15 +280,124 @@ export async function payWithPayPal(page: Page, email: string, password: string)
  *   4. Afterpay redirects back to KWH → order confirmation renders.
  */
 export async function payWithAfterpay(page: Page, email: string, password: string): Promise<void> {
-  await page.locator('[data-testid="place-order-btn"]').first().click();
-  await page.waitForURL(/afterpay|clearpay/i, { timeout: 30_000 });
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
-  await page.getByRole('button', { name: /log ?in|continue/i }).click();
-  await page.getByRole('button', { name: /confirm|authorise|authorize/i }).click();
+  console.log('[Afterpay] === entering payWithAfterpay ===');
+
+  // Snapshot Place Order + any afterpay-specific triggers so we know
+  // which selector to click. KWH disables Place Order (pointer-events:
+  // none) for alt payments and renders the provider's own button.
+  const snap = await page.evaluate(() => {
+    const placeOrder = (() => {
+      const el = document.querySelector('[data-testid="place-order-btn"]');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return {
+        display: window.getComputedStyle(el as HTMLElement).display,
+        pointerEvents: window.getComputedStyle(el as HTMLElement).pointerEvents,
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+      };
+    })();
+    const afterpayEls = Array.from(
+      document.querySelectorAll(
+        'button, a, [role="button"], [class*="afterpay" i], [class*="clearpay" i], [data-testid*="afterpay" i], iframe',
+      ),
+    )
+      .filter((el) => {
+        const s = `${el.getAttribute('class') || ''} ${el.getAttribute('data-testid') || ''} ${el.getAttribute('src') || ''} ${el.getAttribute('title') || ''} ${el.getAttribute('aria-label') || ''}`;
+        return /afterpay|clearpay/i.test(s);
+      })
+      .slice(0, 8)
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          tag: el.tagName.toLowerCase(),
+          class: (el.getAttribute('class') || '').slice(0, 60),
+          tid: el.getAttribute('data-testid') || '',
+          src: (el.getAttribute('src') || '').slice(0, 60),
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+          onscreen: r.width > 0 && r.height > 0,
+        };
+      });
+    return { placeOrder, afterpayEls };
+  });
+  console.log(`[Afterpay] Place Order state: ${JSON.stringify(snap.placeOrder)}`);
+  console.log(`[Afterpay] afterpay-labeled elements (${snap.afterpayEls.length}): ${JSON.stringify(snap.afterpayEls)}`);
+
+  // Try Afterpay-branded trigger first (dedicated button/link/iframe).
+  // If none found, fall back to Place Order with force:true — that
+  // bypasses the pointer-events:none actionability check some skins
+  // apply while the SDK is still mounting.
+  const branded = page
+    .locator('button, a, [role="button"]')
+    .filter({ hasText: /^(pay with )?afterpay|^(pay with )?clearpay|continue with afterpay/i })
+    .first();
+  const brandedCount = await branded.count().catch(() => 0);
+
+  const clickAndWait = async (label: string, fn: () => Promise<void>) => {
+    console.log(`[Afterpay] clicking via ${label} — waiting for redirect (30s)…`);
+    await Promise.all([
+      page.waitForURL(/afterpay|clearpay/i, { timeout: 30_000 }),
+      fn(),
+    ]);
+    console.log(`[Afterpay] ✓ redirected to ${page.url()}`);
+  };
+
+  if (brandedCount > 0) {
+    await clickAndWait('branded Afterpay button', () => branded.click({ timeout: 10_000 }));
+  } else {
+    console.log('[Afterpay] no branded button — falling back to Place Order (force click)');
+    await clickAndWait('Place Order (force)', () =>
+      page.locator('[data-testid="place-order-btn"]').first().click({ force: true, timeout: 10_000 }),
+    );
+  }
+
+  console.log('[Afterpay] on portal — resolving login screen');
+  // KWH passes the checkout email through to Afterpay, which lands us
+  // on a "Welcome back!" password-only screen pre-filled with the
+  // buyer's guest email. Our sandbox creds are a different identity,
+  // so click "Not you?" to reveal the full email+password form.
+  // `.isVisible()` doesn't retry; use `.waitFor({ state: 'visible' })`
+  // so we actually wait for the portal to hydrate.
+  const notYou = page.getByRole('button', { name: /not you/i });
+  const emailInput = page.getByRole('textbox', { name: /email/i });
+  const notYouVisible = await notYou
+    .waitFor({ state: 'visible', timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (notYouVisible) {
+    console.log('[Afterpay] "Welcome back" screen detected — clicking "Not you?"');
+    await notYou.click();
+    await emailInput.waitFor({ state: 'visible', timeout: 10_000 });
+  } else {
+    console.log('[Afterpay] no "Not you?" — assuming full login form is ready');
+    await emailInput.waitFor({ state: 'visible', timeout: 10_000 });
+  }
+  // Afterpay's portal is a two-step login: email screen → Continue →
+  // password screen → Continue → order-review with a final confirm/pay
+  // button. Filling both on the email screen doesn't work — the
+  // password textbox on step 2 needs its own fill after the screen
+  // transitions.
+  console.log('[Afterpay] step A · filling email + clicking Continue');
+  await emailInput.fill(email);
+  await page.getByRole('button', { name: /^continue$/i }).first().click();
+
+  console.log('[Afterpay] step B · waiting for password screen');
+  const passwordInput = page.getByRole('textbox', { name: /password/i });
+  await passwordInput.waitFor({ state: 'visible', timeout: 15_000 });
+  await passwordInput.fill(password);
+  await page.getByRole('button', { name: /^continue$/i }).first().click();
+
+  console.log('[Afterpay] step C · waiting for confirm/pay button');
+  const confirmBtn = page.getByRole('button', {
+    name: /confirm(?:\s*(?:&|and)\s*pay)?|authori[sz]e|pay now|place order/i,
+  });
+  await confirmBtn.waitFor({ state: 'visible', timeout: 20_000 });
+  await confirmBtn.click();
   // Afterpay redirects back to KWH — wait for the URL to leave the
   // afterpay domain so downstream assertions see the confirmation page.
   await page.waitForURL(/kitchenwarehouse/i, { timeout: 60_000 }).catch(() => undefined);
+  console.log('[Afterpay] ✓ returned to KWH — outer flow will assert confirmation');
 }
 
 // ---------- Google Pay (popup from pay.google.com) ----------
