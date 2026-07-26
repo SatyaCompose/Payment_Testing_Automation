@@ -16,8 +16,9 @@ export async function selectMethod(page: Page, log: Logger, method: PaymentMetho
   log(`step 3 · selectMethod ${method}`);
   const label = methodLabel[method];
 
-  // Wait for the payment section to render — it may take a moment
-  // after continueToPayment for the method cards to appear.
+  // Payment section is typically already rendered by continueToPayment.
+  // Short wait as a safety net for slow SPA hydration; don't double-spend
+  // the 20s budget both here AND in continueToPayment.
   await page
     .waitForFunction(
       () =>
@@ -25,7 +26,7 @@ export async function selectMethod(page: Page, log: Logger, method: PaymentMetho
           document.body.innerText,
         ),
       undefined,
-      { timeout: 20_000, polling: 500 },
+      { timeout: 5_000, polling: 250 },
     )
     .catch(() => undefined);
 

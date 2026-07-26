@@ -269,8 +269,11 @@ export async function continueToPayment(
     log(`  · Playwright click failed: ${(err as Error).message?.split('\n')[0]}`);
   });
 
-  // Give the SPA a beat to react, then check if we advanced.
-  const quickTransition = await hasPaymentSectionRendered(page, 2_500);
+  // Give the SPA a beat to react, then check if we advanced. Bumped
+  // from 2.5s → 8s: KWH staging often takes 5-7s to render the payment
+  // section on the first click; a shorter window forces a redundant
+  // 2nd click that itself triggers ~20s of extra network activity.
+  const quickTransition = await hasPaymentSectionRendered(page, 8_000);
   if (quickTransition) return finalizePaymentTransition(page, log);
 
   // 2nd attempt: JS-native click. Some React handlers respond to

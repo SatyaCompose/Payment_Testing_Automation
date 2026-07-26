@@ -129,13 +129,19 @@ export interface PaymentMethodDescriptor {
   longLabel: string;
   /** Slug embedded in screenshot folder names (e.g. "cc"). */
   folderSlug: string;
+  /** Playwright browserName values to skip (e.g. Google Pay doesn't
+   *  run on WebKit, Apple Pay only runs on WebKit). */
+  skipBrowsers?: readonly string[];
+  /** Env var that must be present for this method to run — auto-skip
+   *  when absent (e.g. PAYPAL_SANDBOX_EMAIL for PayPal). */
+  envGuard?: string;
 }
 
 export const PAYMENT_METHODS: Record<PaymentMethod, PaymentMethodDescriptor> = {
   'credit-card': { method: 'credit-card', shortLabel: 'CC', longLabel: 'Credit Card', folderSlug: 'cc' },
-  paypal: { method: 'paypal', shortLabel: 'PP', longLabel: 'PayPal', folderSlug: 'pp' },
-  afterpay: { method: 'afterpay', shortLabel: 'AP', longLabel: 'Afterpay', folderSlug: 'ap' },
-  gpay: { method: 'gpay', shortLabel: 'GP', longLabel: 'Google Pay', folderSlug: 'gp' },
+  paypal: { method: 'paypal', shortLabel: 'PP', longLabel: 'PayPal', folderSlug: 'pp', envGuard: 'PAYPAL_SANDBOX_EMAIL' },
+  afterpay: { method: 'afterpay', shortLabel: 'AP', longLabel: 'Afterpay', folderSlug: 'ap', envGuard: 'AFTERPAY_SANDBOX_EMAIL' },
+  gpay: { method: 'gpay', shortLabel: 'GP', longLabel: 'Google Pay', folderSlug: 'gp', skipBrowsers: ['webkit'] },
   applepay: { method: 'applepay', shortLabel: 'AP-A', longLabel: 'Apple Pay', folderSlug: 'apay' },
 };
 

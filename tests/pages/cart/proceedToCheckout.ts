@@ -39,12 +39,21 @@ export async function proceedToCheckout(
       log(`  · native click failed (${(err as Error).message.split('\n')[0]}); using JS click`);
       await secureCheckout.evaluate((el: HTMLElement) => el.click());
     }
-    await page.waitForURL(/checkout/i, { timeout: 30_000 });
-    log(`  → on ${page.url()}`);
-    return;
+    // KWH's flyout button intermittently fails to trigger the SPA
+    // navigation to /checkout even though the click event fires. Give
+    // it 15s to react; if it hasn't navigated, fall through to the
+    // /cart-page checkout button below (which always works because it's
+    // a straight anchor navigation).
+    try {
+      await page.waitForURL(/checkout/i, { timeout: 15_000 });
+      log(`  → on ${page.url()}`);
+      return;
+    } catch {
+      log('  ! flyout click did not navigate to /checkout — falling back via /cart page');
+    }
+  } else {
+    log('  → flyout not open, falling back via /cart');
   }
-
-  log('  → flyout not open, falling back via /cart');
   await openCart();
   await waitForOverlay();
   const cartPageCheckout = page
@@ -52,18 +61,36 @@ export async function proceedToCheckout(
     .or(
       page
         .locator('button, [role="button"], a, input[type="submit"]')
-        .filter({ hasText: /secure\s*checkout|^checkout$|^proceed/i }),
+        .filter({ hasText: /secure\s*checkout|^checkout$|^proceed|proceed\s*to/i }),
     )
     .first();
-  if (!(await cartPageCheckout.count().catch(() => 0))) {
-    throw new Error('No Checkout button found on cart page');
+
+  if (await cartPageCheckout.count().catch(() => 0)) {
+    await cartPageCheckout.scrollIntoViewIfNeeded().catch(() => undefined);
+    try {
+      await cartPageCheckout.click({ force: true, timeout: 5_000 });
+    } catch {
+      await cartPageCheckout.evaluate((el: HTMLElement) => el.click());
+    }
+    await page.waitForURL(/checkout/i, { timeout: 30_000 });
+    log(`  → on ${page.url()}`);
+    return;
   }
-  await cartPageCheckout.scrollIntoViewIfNeeded().catch(() => undefined);
-  try {
-    await cartPageCheckout.click({ force: true, timeout: 5_000 });
-  } catch {
-    await cartPageCheckout.evaluate((el: HTMLElement) => el.click());
-  }
+
+  // No cart-page checkout button matched. Diagnostic then direct nav.
+  const clickables = await page
+    .locator('button, [role="button"], a, input[type="submit"]')
+    .allTextContents()
+    .catch(() => []);
+  log(
+    `  ! /cart has no matching Checkout button. Visible clickables: ${clickables
+      .map((s) => s.trim())
+      .filter((s) => s && s.length < 40)
+      .slice(0, 20)
+      .join(' | ')}`,
+  );
+  log('  → direct-navigating to /checkout as last resort');
+  await page.goto('/checkout');
   await page.waitForURL(/checkout/i, { timeout: 30_000 });
   log(`  → on ${page.url()}`);
 }

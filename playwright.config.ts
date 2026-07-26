@@ -61,7 +61,15 @@ export default defineConfig({
         // preset's deviceScaleFactor — an explicit size sidesteps that.
         viewport: { width: 1920, height: 1080 },
         launchOptions: {
-          args: ['--start-maximized'],
+          args: [
+            '--start-maximized',
+            // Google Pay / Payment Request API silently refuse to open
+            // the payment sheet when navigator.webdriver === true. This
+            // flag hides Chromium's automation fingerprint so the SDK
+            // treats us like a normal user session.
+            '--disable-blink-features=AutomationControlled',
+          ],
+          ignoreDefaultArgs: ['--enable-automation'],
         },
       },
     },

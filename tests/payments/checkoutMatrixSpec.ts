@@ -42,7 +42,14 @@ function registerRow(args: {
   const title = `${id} ${user.titlePhrase} with ${paymentLabel} (${section.short})`;
   const folder = screenshotFolder(section, user, PAYMENT_METHODS[paymentMethod]);
 
-  test(title, async ({ flow }, testInfo) => {
+  test(title, async ({ flow, browserName }, testInfo) => {
+    const method = PAYMENT_METHODS[paymentMethod];
+    if (method.skipBrowsers?.includes(browserName)) {
+      test.skip(true, `${paymentMethod} is not supported on ${browserName}`);
+    }
+    if (method.envGuard && !process.env[method.envGuard]) {
+      test.skip(true, `${method.envGuard} not set`);
+    }
     if (user.envGuard && !process.env[user.envGuard]) {
       test.skip(true, `${user.envGuard} not set`);
     }

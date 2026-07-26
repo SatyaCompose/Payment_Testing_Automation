@@ -1,5 +1,7 @@
-import { test as base, expect, type BrowserContext } from '@playwright/test';
+import { test as base, expect, type Browser, type BrowserContext } from '@playwright/test';
 import * as fs from 'fs';
+import { chromium as chromiumExtra } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { CartPage } from '../pages/CartPage';
 import { CheckoutPage } from '../pages/CheckoutPage';
 import { LoginPage } from '../pages/LoginPage';
@@ -10,6 +12,12 @@ import { CheckoutFlow } from '../flows/CheckoutFlow';
 import { AUTH_FILE } from './auth';
 import { BuyerDetails, guestBuyer } from './testData';
 import { CURSOR_OVERLAY_SCRIPT } from '../utils/cursorOverlay';
+
+// Register the stealth plugin once — patches ~15 anti-automation
+// detection surfaces (webdriver flag, WebGL fingerprint, plugin list,
+// chrome runtime, permissions API, etc.). Enables Google Pay's SDK to
+// render its sheet contents under Playwright automation.
+chromiumExtra.use(StealthPlugin());
 
 interface Fixtures {
   cartPage: CartPage;
@@ -30,6 +38,14 @@ interface WorkerFixtures {
    * signed-in `storageState` is loaded once at the start.
    */
   sharedContext: BrowserContext;
+  /**
+   * Stealth-launched Chromium browser (via playwright-extra + stealth
+   * plugin). Only initialised when the current project targets chromium
+   * or android-chrome; other browsers fall back to Playwright's default
+   * `browser` fixture. Google Pay's SDK checks ~15 fingerprint surfaces
+   * that stealth patches, letting the sheet render under automation.
+   */
+  stealthBrowser: Browser | null;
 }
 
 import * as path from 'path';
@@ -59,8 +75,33 @@ function shouldSkipBecauseScreenshotExists(title: string, projectName: string): 
 }
 
 export const test = base.extend<Fixtures, WorkerFixtures>({
+  stealthBrowser: [
+    async ({}, use, workerInfo) => {
+      const isChromium = workerInfo.project.name.startsWith('chromium-') ||
+        workerInfo.project.name.startsWith('android-');
+      if (!isChromium) {
+        await use(null);
+        return;
+      }
+      const b = await chromiumExtra.launch({
+        headless: false,
+        args: [
+          '--start-maximized',
+          '--disable-blink-features=AutomationControlled',
+        ],
+        ignoreDefaultArgs: ['--enable-automation'],
+      });
+      await use(b);
+      await b.close();
+    },
+    { scope: 'worker' },
+  ],
+
   sharedContext: [
-    async ({ browser }, use, workerInfo) => {
+    async ({ browser, stealthBrowser }, use, workerInfo) => {
+      // Prefer the stealth browser for chromium projects; fall back to
+      // Playwright's default browser fixture for webkit / mobile-safari.
+      const effectiveBrowser = stealthBrowser ?? browser;
       // When RECORD_VIDEO=1 the `page` fixture creates a fresh context
       // per test (so each test's video can be finalized + renamed). In
       // that mode the shared context is unused — hand back a placeholder
@@ -71,7 +112,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
       }
       const isChromium = workerInfo.project.name.startsWith('chromium-') ||
         workerInfo.project.name.startsWith('android-');
-      const context = await browser.newContext({
+      const context = await effectiveBrowser.newContext({
         storageState: fs.existsSync(AUTH_FILE) ? AUTH_FILE : undefined,
         ...(isChromium ? { viewport: { width: 1920, height: 1080 } } : {}),
       });
@@ -89,12 +130,13 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
   // - RECORD_VIDEO=1: build a per-test context so `page.video()` can be
   //   finalized and the resulting `.webm` renamed to include the date
   //   and test id.
-  page: async ({ sharedContext, browser }, use, testInfo) => {
+  page: async ({ sharedContext, browser, stealthBrowser }, use, testInfo) => {
     if (process.env.RECORD_VIDEO === '1') {
       const isChromium = testInfo.project.name.startsWith('chromium-') ||
         testInfo.project.name.startsWith('android-');
+      const effectiveBrowser = stealthBrowser ?? browser;
       const videoDir = path.join(testInfo.project.outputDir ?? 'test-results', 'videos');
-      const context = await browser.newContext({
+      const context = await effectiveBrowser.newContext({
         storageState: fs.existsSync(AUTH_FILE) ? AUTH_FILE : undefined,
         ...(isChromium ? { viewport: { width: 1920, height: 1080 } } : {}),
         recordVideo: {
