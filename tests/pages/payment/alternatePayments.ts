@@ -213,34 +213,58 @@ export async function payWithPayPal(page: Page, email: string, password: string)
   // When we identified an iframe, drill into it with frameLocator
   // and click the actual .paypal-button element. Coordinate-click
   // is the fallback (attr / img-ancestor kinds).
+  //
+  // Popup detection: PayPal's SDK opens the login window as a real
+  // new tab from inside the (cross-origin) SDK iframe. Depending on
+  // browser + SDK version this can attach to the BrowserContext as a
+  // brand-new Page rather than firing page.on('popup') on the parent.
+  // Race both events so we catch either surface.
+  const context = page.context();
+  const awaitNewSurface = () =>
+    Promise.race([
+      page.waitForEvent('popup', { timeout: 30_000 }).then((p) => ({ p, via: 'page.popup' as const })),
+      context.waitForEvent('page', { timeout: 30_000 }).then((p) => ({ p, via: 'context.page' as const })),
+    ]);
   let popup: Page;
   if (clickBox.kind === 'iframe') {
     const paypalFrame = page.frameLocator('iframe[title="PayPal"], iframe[src*="paypal.com"]').first();
     const innerBtn = paypalFrame.locator('[role="link"], .paypal-button, [data-funding-source="paypal"]').first();
-    console.log('[PayPal] clicking inside PayPal iframe via frameLocator — waiting for popup (30s)…');
-    [popup] = await Promise.all([
-      page.waitForEvent('popup', { timeout: 30_000 }),
+    console.log('[PayPal] clicking inside PayPal iframe via frameLocator — waiting for popup/new-tab (30s)…');
+    const [surface] = await Promise.all([
+      awaitNewSurface(),
       innerBtn.click({ timeout: 15_000 }),
     ]);
+    popup = surface.p;
+    console.log(`[PayPal] ✓ new surface via ${surface.via}`);
   } else {
-    console.log('[PayPal] dispatching mouse.click and waiting for popup event (30s)…');
-    [popup] = await Promise.all([
-      page.waitForEvent('popup', { timeout: 30_000 }),
+    console.log('[PayPal] dispatching mouse.click and waiting for popup/new-tab (30s)…');
+    const [surface] = await Promise.all([
+      awaitNewSurface(),
       page.mouse.click(clickX, clickY),
     ]);
+    popup = surface.p;
+    console.log(`[PayPal] ✓ new surface via ${surface.via}`);
   }
   console.log(`[PayPal] ✓ popup opened: ${popup.url()}`);
   await popup.waitForLoadState('domcontentloaded').catch(() => undefined);
   console.log('[PayPal] popup DOM loaded — filling email');
-  await popup.getByLabel(/email/i).fill(email);
+  // `getByLabel(/email/i)` matches the "Login with email one-time
+  // code" link + OTP chevron button — scope to the actual textbox.
+  await popup.getByRole('textbox', { name: /email or mobile/i }).fill(email);
   console.log('[PayPal] email filled — clicking Next');
-  await popup.getByRole('button', { name: /next/i }).click();
+  await popup.getByRole('button', { name: /^next$/i }).click();
   console.log('[PayPal] Next clicked — filling password');
-  await popup.getByLabel(/password/i).fill(password);
+  // Same rationale — use the password textbox specifically. Some
+  // PayPal skins render it as an input, others as a passwordbox
+  // role; match either.
+  const passwordBox = popup
+    .getByRole('textbox', { name: /^password$/i })
+    .or(popup.locator('input#password'));
+  await passwordBox.fill(password);
   console.log('[PayPal] password filled — clicking Log In');
   await popup.getByRole('button', { name: /log ?in/i }).click();
   console.log('[PayPal] logged in — clicking Pay Now / Complete Purchase');
-  await popup.getByRole('button', { name: /pay now|complete purchase/i }).click();
+  await popup.getByRole('button', { name: /pay now|complete purchase|continue/i }).click();
   console.log('[PayPal] Pay Now clicked — waiting for popup to close');
   await popup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
   console.log('[PayPal] popup closed — outer flow will assert confirmation');
