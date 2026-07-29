@@ -63,14 +63,26 @@ function shouldSkipBecauseScreenshotExists(title: string, projectName: string): 
   const titleMatch = title.match(/(\d+\.\d+)/);
   if (!titleMatch) return null;
   const idPrefix = titleMatch[1];
+  const paymentSlug = paymentSlugFromTitle(title);
+  if (!paymentSlug) return null;
   if (!fs.existsSync(SCREENSHOTS_DIR)) return null;
+  const folderPrefix = `${idPrefix}-${paymentSlug}-`;
   const dirs = fs
     .readdirSync(SCREENSHOTS_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && d.name.startsWith(`${idPrefix}-`));
+    .filter((d) => d.isDirectory() && d.name.startsWith(folderPrefix));
   for (const d of dirs) {
     const file = path.join(SCREENSHOTS_DIR, d.name, `${projectName}-order-confirmation.png`);
     if (fs.existsSync(file)) return file;
   }
+  return null;
+}
+
+function paymentSlugFromTitle(title: string): string | null {
+  if (/google pay/i.test(title)) return 'gp';
+  if (/apple pay/i.test(title)) return 'apay';
+  if (/credit card/i.test(title)) return 'cc';
+  if (/paypal/i.test(title)) return 'pp';
+  if (/afterpay/i.test(title)) return 'ap';
   return null;
 }
 

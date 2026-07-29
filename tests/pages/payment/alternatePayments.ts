@@ -429,19 +429,152 @@ export async function payWithAfterpay(page: Page, email: string, password: strin
  * the single popup-button click is manual.
  */
 export async function payWithGooglePay(page: Page): Promise<void> {
-  const gpayContainer = page
+  console.log('[GPay] === entering payWithGooglePay ===');
+  const context = page.context();
+
+  // ---------- OBSERVE-ONLY LISTENERS ----------
+  page.on('popup', (p) => console.log(`[GPay] ! page.on('popup') → ${p.url()}`));
+  context.on('page', (p) => console.log(`[GPay] ! context.on('page') → ${p.url()}`));
+  page.on('framenavigated', (f) => {
+    if (/pay\.google\.com|googlepay|google\.com\/pay/i.test(f.url())) {
+      console.log(`[GPay] ! framenavigated → ${f.url().slice(0, 120)}`);
+    }
+  });
+  page.on('request', (req) => {
+    const url = req.url();
+    const isKwhDomain = /kitchenwarehouse\.com|frontastic|cybersource|pay\.google\.com|googlepay/i.test(url);
+    const isAnalytics = /tagmanager|analytics|gtm|hotjar|clarity|datadoghq|newrelic|pixlee|stackadapt|paypal\.com\/xoplatform/i.test(url);
+    const isBoring = /\.(png|jpg|jpeg|gif|svg|webp|woff2?|ttf|css|ico)$/i.test(url.split('?')[0]);
+    if (isKwhDomain && !isAnalytics && !isBoring) {
+      console.log(`[GPay] → ${req.method()} ${url.slice(0, 140)}`);
+    }
+  });
+  page.on('response', (res) => {
+    const url = res.url();
+    const isKwhBackend = /kitchenwarehouse\.com|frontastic|cybersource/i.test(url);
+    const isAnalytics = /tagmanager|analytics|gtm|hotjar|clarity|datadoghq/i.test(url);
+    const isBoring = /\.(png|jpg|jpeg|gif|svg|webp|woff2?|ttf|css|ico)$/i.test(url.split('?')[0]);
+    if (isKwhBackend && !isAnalytics && !isBoring && res.request().method() !== 'GET') {
+      console.log(`[GPay] ← ${res.status()} ${res.request().method()} ${url.slice(0, 140)}`);
+    }
+  });
+  page.on('console', (msg) => {
+    const t = msg.text();
+    if (msg.type() === 'error' || msg.type() === 'warning' || /gpay|google|paymentsclient|loadpaymentdata|token|cybersource|microform|flex|order|checkout|fail|reject|catch/i.test(t)) {
+      console.log(`[GPay] ! console (${msg.type()}): ${t.slice(0, 600)}`);
+    }
+  });
+  page.on('pageerror', (err) => {
+    console.log(`[GPay] ! page error: ${err.message.slice(0, 500)}`);
+  });
+
+  // Wait for the GPay button container to render before we snapshot.
+  await page
     .locator('[class*="gpay-button-container"]')
     .filter({ visible: true })
+    .first()
+    .waitFor({ state: 'visible', timeout: 15_000 })
+    .catch(() => console.log('[GPay] gpay-button-container did not appear within 15s'));
+
+  // ---------- LAYOUT SNAPSHOT BEFORE CLICK ----------
+  const layout = await page.evaluate(() => {
+    const readEl = (el: Element | null) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const cs = window.getComputedStyle(el as HTMLElement);
+      return {
+        tag: el.tagName.toLowerCase(),
+        text: (el.textContent || '').trim().slice(0, 40),
+        class: (el.getAttribute('class') || '').slice(0, 80),
+        rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+        display: cs.display,
+        visibility: cs.visibility,
+        pointerEvents: cs.pointerEvents,
+        zIndex: cs.zIndex,
+        position: cs.position,
+        disabled: (el as HTMLButtonElement).disabled ?? null,
+      };
+    };
+    const placeOrder = document.querySelector('[data-testid="place-order-btn"]');
+    const gpayBtn = document.querySelector('[class*="gpay-button-container"]');
+    // What's at the visual centre of each element? Tells us which
+    // element intercepts clicks at that position.
+    const atCenterOf = (el: Element | null) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return top
+        ? {
+            tag: top.tagName.toLowerCase(),
+            class: (top.getAttribute('class') || '').slice(0, 80),
+            text: (top.textContent || '').trim().slice(0, 40),
+          }
+        : null;
+    };
+    return {
+      placeOrder: readEl(placeOrder),
+      gpayBtn: readEl(gpayBtn),
+      elementAtPlaceOrderCentre: atCenterOf(placeOrder),
+      elementAtGpayBtnCentre: atCenterOf(gpayBtn),
+    };
+  });
+  // Single-line JSON so grep captures the whole thing.
+  console.log(`[GPay] layout.placeOrder: ${JSON.stringify(layout.placeOrder)}`);
+  console.log(`[GPay] layout.gpayBtn: ${JSON.stringify(layout.gpayBtn)}`);
+  console.log(`[GPay] layout.elementAtPlaceOrderCentre: ${JSON.stringify(layout.elementAtPlaceOrderCentre)}`);
+  console.log(`[GPay] layout.elementAtGpayBtnCentre: ${JSON.stringify(layout.elementAtGpayBtnCentre)}`);
+
+  // ---------- CLICK ----------
+  // Click the inner `.gpay-button.buy` div (the real click target bound
+  // to Google's PaymentRequest handler), not the outer container wrapper.
+  // Drop force:true so Playwright routes through hover→mousedown→mouseup —
+  // PaymentRequest requires a real user gesture on the bound element.
+  const gpayButton = page
+    .locator('.gpay-button.buy')
+    .filter({ visible: true })
     .first();
-  await gpayContainer.waitFor({ state: 'visible', timeout: 15_000 });
-  console.log('[GPay] clicking GPay button — waiting for MANUAL Pay click in popup (up to 3 min)');
-  await gpayContainer.click({ force: true });
+  await gpayButton.waitFor({ state: 'visible', timeout: 15_000 });
+  console.log('[GPay] clicking .gpay-button.buy — waiting for MANUAL Pay click in popup (up to 3 min)');
+  await gpayButton.click();
+
+  // Heartbeat: every 10s log the page URL + any visible errors so we
+  // can see progress (or lack of) in real time.
+  const deadline = Date.now() + 180_000;
+  const heartbeat = (async () => {
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(10_000).catch(() => undefined);
+      if (page.isClosed?.()) return;
+      const snap = await page
+        .evaluate(() => {
+          const url = window.location.href;
+          const errorText = Array.from(document.querySelectorAll('[role="alert"], [class*="error" i]'))
+            .map((el) => (el.textContent || '').trim())
+            .filter((s) => s && s.length < 200)
+            .slice(0, 3);
+          const modals = Array.from(document.querySelectorAll('[role="dialog"], [class*="modal" i], [class*="overlay" i]'))
+            .filter((el) => {
+              const r = el.getBoundingClientRect();
+              return r.width > 100 && r.height > 100;
+            })
+            .slice(0, 3)
+            .map((el) => ({
+              class: (el.getAttribute('class') || '').slice(0, 60),
+              text: (el.textContent || '').trim().slice(0, 60),
+            }));
+          return { url, errors: errorText, modals };
+        })
+        .catch(() => null);
+      if (!snap) return;
+      console.log(`[GPay] ♥ url=${snap.url} modals=${JSON.stringify(snap.modals)} errors=${JSON.stringify(snap.errors)}`);
+    }
+  })();
 
   // Wait up to 3 minutes for the manual Pay click to complete. Two
   // signals: the URL navigates away from /checkout, OR confirmation
   // text renders on the page. Whichever fires first, we return and let
   // the outer flow assert the full confirmation page.
   await Promise.race([
+    heartbeat,
     page
       .waitForURL((url) => !/\/checkout(?:\?|$|\/)/i.test(url.toString()), {
         timeout: 180_000,
@@ -455,4 +588,5 @@ export async function payWithGooglePay(page: Page): Promise<void> {
       .then(() => console.log('[GPay] confirmation text visible'))
       .catch(() => undefined),
   ]);
+  console.log(`[GPay] === exiting payWithGooglePay, final URL=${page.url()} ===`);
 }

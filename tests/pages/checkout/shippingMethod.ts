@@ -83,10 +83,76 @@ export async function selectShippingMethod(
     log(`  · radio still not checked — falling through to card-click path`);
   }
 
-  // Strategy 2: click the card container that contains the target text
-  // but NOT the other methods' texts (excludes parent wrappers).
+  // Strategy 1.5 (KWH-specific): shipping cards are <label> wrappers
+  // around <input type="checkbox" class="sr-only">. Clicking any wrapper
+  // <div>/<span> around the label does nothing — only the label itself is
+  // bound to the input. Prefer the label directly.
   const escapedOthers = others.map(escapeRegex);
   const notOtherRe = new RegExp(escapedOthers.join('|'), 'i');
+
+  const kwhLabel = page
+    .locator('label')
+    .filter({ hasText: targetRe })
+    .filter({ hasNotText: notOtherRe })
+    .filter({ has: page.locator('input[type="checkbox"]') });
+  const kwhLabelCount = await kwhLabel.count().catch(() => 0);
+  log(`  · KWH label candidates (<label> with sr-only checkbox): ${kwhLabelCount}`);
+  if (kwhLabelCount > 0) {
+    const label = kwhLabel.first();
+    const inputInside = label.locator('input[type="checkbox"]').first();
+    const already = await inputInside.isChecked().catch(() => false);
+    if (already) {
+      log(`  ✓ ${method} already checked (site default) — no click needed`);
+      return;
+    }
+    await label.scrollIntoViewIfNeeded({ timeout: 3_000 }).catch(() => undefined);
+    const kwhCardText = ((await label.textContent().catch(() => null)) ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    log(`  → clicking KWH label: "${kwhCardText}"`);
+
+    // Try increasingly forceful click strategies. React-controlled checkboxes
+    // sometimes ignore synthesized clicks; we escalate to the native setter
+    // + change-event dispatch, which is how React tests trigger onChange.
+    const tryStrategies: { name: string; fn: () => Promise<unknown> }[] = [
+      { name: 'label.click', fn: () => label.click({ force: true, timeout: 5_000 }) },
+      { name: 'input.click (Playwright)', fn: () => inputInside.click({ force: true, timeout: 5_000 }) },
+      { name: 'input.evaluate.click', fn: () => inputInside.evaluate((el: HTMLInputElement) => el.click()) },
+      {
+        name: 'native setter + change dispatch',
+        fn: () =>
+          inputInside.evaluate((el: HTMLInputElement) => {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+            setter?.call(el, true);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }),
+      },
+    ];
+
+    let nowChecked = false;
+    for (const strat of tryStrategies) {
+      await strat.fn().catch((err) => log(`  · ${strat.name} threw: ${(err as Error).message?.split('\n')[0]}`));
+      nowChecked = await inputInside.isChecked().catch(() => false);
+      if (nowChecked) {
+        log(`  · toggled via "${strat.name}"`);
+        break;
+      }
+      log(`  · "${strat.name}" did not toggle input — trying next`);
+    }
+
+    if (nowChecked) {
+      const verdict = await verifyShippingSelection(page, target, others);
+      if (verdict.ok) {
+        log(`  ✓ ${method} shipping selected via KWH label`);
+        return;
+      }
+      log(`  · input checked but verdict not ok (${verdict.reason}) — falling through`);
+    } else {
+      log(`  · all KWH strategies failed to toggle input — falling through to card-click path`);
+    }
+  }
+
+  // Strategy 2: click the card container that contains the target text
+  // but NOT the other methods' texts (excludes parent wrappers).
 
   const card = page
     .locator(':is(button, [role="button"], [role="radio"], label, [tabindex="0"], div, li, article)')
