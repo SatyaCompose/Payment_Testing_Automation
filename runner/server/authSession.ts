@@ -1,6 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import type { SseBroadcaster } from './sseBroadcaster';
+import { killTree, spawnCli } from './procUtils';
 
 export interface AuthStatus {
   signedIn: boolean;
@@ -43,10 +44,34 @@ export class AuthSession {
     this.broadcaster.broadcast({ type: 'auth-start', timestamp: Date.now() });
     this.log('info', 'Opening a real Chrome window for sign-in…');
 
-    this.child = spawn('npx', ['tsx', 'tests/scripts/interactive-signin.ts'], {
-      cwd: this.root,
-      env: { ...process.env, FORCE_COLOR: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+    try {
+      this.child = spawnCli(this.root, 'tsx', ['tests/scripts/interactive-signin.ts'], {
+        env: { ...process.env, FORCE_COLOR: '0' },
+      });
+    } catch (err) {
+      this.child = null;
+      const message = err instanceof Error ? err.message : String(err);
+      this.log('error', `Could not start sign-in: ${message}`);
+      this.broadcaster.broadcast({
+        type: 'auth-end',
+        ok: false,
+        error: message,
+        timestamp: Date.now(),
+      });
+      return false;
+    }
+
+    // A spawn failure emits 'error', not 'exit'. Unhandled, it takes the
+    // whole server down and every subsequent request dies on ECONNREFUSED.
+    this.child.on('error', (err) => {
+      this.child = null;
+      this.log('error', `Sign-in process error: ${err.message}`);
+      this.broadcaster.broadcast({
+        type: 'auth-end',
+        ok: false,
+        error: err.message,
+        timestamp: Date.now(),
+      });
     });
 
     const forward = (level: 'info' | 'error') => (buf: Buffer) => {
@@ -80,7 +105,7 @@ export class AuthSession {
   /** Cancel an in-progress sign-in. Returns false if nothing was running. */
   cancel(): boolean {
     if (!this.child || this.child.killed) return false;
-    this.child.kill('SIGTERM');
+    killTree(this.child, 'SIGTERM');
     return true;
   }
 }

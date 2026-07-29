@@ -1,4 +1,11 @@
-import { test as base, expect, type Browser, type BrowserContext } from '@playwright/test';
+import {
+  test as base,
+  expect,
+  type Browser,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type FullProject,
+} from '@playwright/test';
 import * as fs from 'fs';
 import { chromium as chromiumExtra } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
@@ -77,6 +84,35 @@ function shouldSkipBecauseScreenshotExists(title: string, projectName: string): 
   return null;
 }
 
+/**
+ * Forward the emulation options the project declared in
+ * playwright.config.ts into a manually-created context.
+ *
+ * Project-level `use` options are applied by Playwright's *built-in*
+ * `context`/`page` fixtures. This suite builds its own context off the
+ * `browser` fixture (so one window is shared across tests), which means
+ * none of them arrive on their own — without this, `devices['Pixel 7']`
+ * and `devices['iPhone 14']` are silently discarded and every project
+ * renders as a default desktop window.
+ */
+function projectContextOptions(project: FullProject): BrowserContextOptions {
+  const {
+    viewport,
+    userAgent,
+    deviceScaleFactor,
+    isMobile,
+    hasTouch,
+    locale,
+    timezoneId,
+  } = project.use;
+  return { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, locale, timezoneId };
+}
+
+/** Mobile device presets set `isMobile` — used to skip desktop-only launch args. */
+function isMobileProject(project: FullProject): boolean {
+  return project.use.isMobile === true;
+}
+
 function paymentSlugFromTitle(title: string): string | null {
   if (/google pay/i.test(title)) return 'gp';
   if (/apple pay/i.test(title)) return 'apay';
@@ -95,10 +131,13 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         await use(null);
         return;
       }
+      // --start-maximized only makes sense for desktop projects. On a
+      // mobile preset it maximises the window around a 412px viewport,
+      // leaving the page letterboxed in a sea of grey.
       const b = await chromiumExtra.launch({
         headless: false,
         args: [
-          '--start-maximized',
+          ...(isMobileProject(workerInfo.project) ? [] : ['--start-maximized']),
           '--disable-blink-features=AutomationControlled',
         ],
         ignoreDefaultArgs: ['--enable-automation'],
@@ -122,11 +161,9 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         await use({} as BrowserContext);
         return;
       }
-      const isChromium = workerInfo.project.name.startsWith('chromium-') ||
-        workerInfo.project.name.startsWith('android-');
       const context = await effectiveBrowser.newContext({
         storageState: fs.existsSync(AUTH_FILE) ? AUTH_FILE : undefined,
-        ...(isChromium ? { viewport: { width: 1920, height: 1080 } } : {}),
+        ...projectContextOptions(workerInfo.project),
       });
       // Inject a floating cursor overlay so a human watching the headed
       // browser can see exactly where the script is pointing/clicking.
@@ -144,19 +181,19 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
   //   and test id.
   page: async ({ sharedContext, browser, stealthBrowser }, use, testInfo) => {
     if (process.env.RECORD_VIDEO === '1') {
-      const isChromium = testInfo.project.name.startsWith('chromium-') ||
-        testInfo.project.name.startsWith('android-');
       const effectiveBrowser = stealthBrowser ?? browser;
       const videoDir = path.join(testInfo.project.outputDir ?? 'test-results', 'videos');
+      const contextOptions = projectContextOptions(testInfo.project);
       const context = await effectiveBrowser.newContext({
         storageState: fs.existsSync(AUTH_FILE) ? AUTH_FILE : undefined,
-        ...(isChromium ? { viewport: { width: 1920, height: 1080 } } : {}),
+        ...contextOptions,
         recordVideo: {
           dir: videoDir,
           // Playwright's default recording resolution is very small
           // (~800px wide) and gets upscaled during playback → blurry.
-          // Pin to 1080p so text/logos in the recording stay readable.
-          size: { width: 1920, height: 1080 },
+          // Record at the project's own viewport so desktop stays 1080p
+          // and mobile isn't stretched into a 1920-wide letterbox.
+          size: contextOptions.viewport ?? { width: 1920, height: 1080 },
         },
       });
       await context.addInitScript(CURSOR_OVERLAY_SCRIPT);

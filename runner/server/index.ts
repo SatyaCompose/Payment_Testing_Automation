@@ -4,6 +4,7 @@ import cors from 'cors';
 import { SseBroadcaster } from './sseBroadcaster';
 import { AuthSession } from './authSession';
 import { PlaywrightRunner } from './playwrightRunner';
+import { isWindows } from './procUtils';
 import type { StartOptions } from './scopeArgs';
 
 const PORT = Number(process.env.RUNNER_PORT ?? 3001);
@@ -46,8 +47,12 @@ app.post('/api/stop', (_req, res) => {
   res.json({ ok: true });
 });
 
+const PAUSE_UNSUPPORTED =
+  'Pause/Resume needs SIGSTOP, which Windows does not have. Use Stop and re-run instead.';
+
 app.post('/api/pause', (_req, res) => {
   const result = runner.pause();
+  if (result === 'unsupported') return res.status(501).json({ error: PAUSE_UNSUPPORTED });
   if (result === 'not-running') return res.status(409).json({ error: 'No run in progress' });
   if (result === 'already-paused') return res.status(409).json({ error: 'Already paused' });
   if (result === 'signal-failed') return res.status(500).json({ error: 'Could not pause the process group' });
@@ -56,6 +61,7 @@ app.post('/api/pause', (_req, res) => {
 
 app.post('/api/resume', (_req, res) => {
   const result = runner.resume();
+  if (result === 'unsupported') return res.status(501).json({ error: PAUSE_UNSUPPORTED });
   if (result === 'not-running') return res.status(409).json({ error: 'No run in progress' });
   if (result === 'not-paused') return res.status(409).json({ error: 'Not paused' });
   if (result === 'signal-failed') return res.status(500).json({ error: 'Could not resume the process group' });
@@ -90,8 +96,33 @@ app.post('/api/auth-cancel', (_req, res) => {
 });
 
 // ---------- Boot ----------
-app.listen(PORT, () => {
+// Last-resort net: a stray child-process 'error' used to kill the server
+// outright, which surfaced in the UI only as ECONNREFUSED on every poll.
+// Log it loudly and keep serving.
+process.on('uncaughtException', (err) => {
+  log('error', `Uncaught server exception (recovered): ${err.message}`);
+  console.error(err);
+});
+
+const server = app.listen(PORT, () => {
   console.log(`▶ Runner server listening on http://localhost:${PORT}`);
+});
+
+// A failed listen must stay fatal — recovering from it would leave a
+// server process alive with no listener, so the UI would keep failing
+// with ECONNREFUSED while the log claimed everything was fine.
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `✗ Port ${PORT} is already in use — an older runner is probably still alive.\n` +
+        (isWindows
+          ? `  Find it:  netstat -ano | findstr :${PORT}\n  Kill it:  taskkill /PID <pid> /T /F`
+          : `  Find it:  lsof -ti tcp:${PORT}\n  Kill it:  kill -9 $(lsof -ti tcp:${PORT})`),
+    );
+  } else {
+    console.error(`✗ Runner server failed to start: ${err.message}`);
+  }
+  process.exit(1);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

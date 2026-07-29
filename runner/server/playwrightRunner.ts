@@ -1,14 +1,21 @@
-import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { execSync, type ChildProcess } from 'node:child_process';
 import type { SseBroadcaster } from './sseBroadcaster';
 import { buildScopeArgs, StartOptions } from './scopeArgs';
 import { handleLine } from './lineParser';
+import { canSuspend, isWindows, killTree, spawnCli } from './procUtils';
 
 type LogLevel = 'info' | 'warn' | 'error';
 type Log = (level: LogLevel, message: string) => void;
 
 /** Kill any zombie Playwright workers from previous sessions (paused,
- *  orphaned by tsx-watch restarts, etc.). */
+ *  orphaned by tsx-watch restarts, etc.).
+ *
+ *  POSIX only. The Windows equivalent would have to match on node.exe,
+ *  which is indistinguishable from this server's own process — killing
+ *  those would take the runner down with them. Windows relies on the
+ *  taskkill /T teardown in killTree instead. */
 function killZombieWorkers(): void {
+  if (isWindows) return;
   try {
     execSync(
       "ps -A -o pid,stat,command | awk '($2 ~ /^T/ || $0 ~ /workerProcessEntry/) && $0 !~ /awk/ { print $1 }' | while read pid; do kill -CONT $pid 2>/dev/null; kill -TERM $pid 2>/dev/null; done",
@@ -46,18 +53,7 @@ export class PlaywrightRunner {
    */
   private signalGroup(sig: NodeJS.Signals): boolean {
     if (!this.child || this.child.killed || !this.child.pid) return false;
-    try {
-      process.kill(-this.child.pid, sig);
-      return true;
-    } catch (err) {
-      this.log('warn', `Group signal ${sig} failed: ${(err as Error).message} — falling back to child.kill`);
-      try {
-        this.child.kill(sig);
-        return true;
-      } catch {
-        return false;
-      }
-    }
+    return killTree(this.child, sig);
   }
 
   start(opts: StartOptions): void {
@@ -116,15 +112,28 @@ export class PlaywrightRunner {
       env.RECORD_VIDEO = '1';
     }
 
-    this.child = spawn('npx', args, {
-      cwd: this.root,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      // detached: true creates a new process group so we can signal the
-      // whole tree (npx → tsx → node → playwright → browser driver) via
-      // a negative PID. Without this, SIGSTOP/SIGTERM only hit npx and
-      // the deeper Playwright child keeps running.
-      detached: true,
+    // spawnCli runs the local Playwright CLI through node — see procUtils
+    // for why npx is avoided. On POSIX the child lands in its own process
+    // group so SIGSTOP/SIGTERM reach the deeper Playwright children and
+    // browser drivers, not just the wrapper.
+    try {
+      this.child = spawnCli(this.root, 'playwright', args.slice(1), { env });
+    } catch (err) {
+      this.child = null;
+      const message = err instanceof Error ? err.message : String(err);
+      this.log('error', `Could not start Playwright: ${message}`);
+      this.broadcaster.broadcast({ type: 'stopped', timestamp: Date.now() });
+      return;
+    }
+
+    // Without this, a spawn failure emits an unhandled 'error' event and
+    // crashes the server, leaving the UI on ECONNREFUSED.
+    this.child.on('error', (err) => {
+      this.child = null;
+      this.stopping = false;
+      this.paused = false;
+      this.log('error', `Playwright process error: ${err.message}`);
+      this.broadcaster.broadcast({ type: 'stopped', timestamp: Date.now() });
     });
 
     const handlers = {
@@ -180,7 +189,8 @@ export class PlaywrightRunner {
     return true;
   }
 
-  pause(): 'ok' | 'not-running' | 'already-paused' | 'signal-failed' {
+  pause(): 'ok' | 'not-running' | 'already-paused' | 'signal-failed' | 'unsupported' {
+    if (!canSuspend) return 'unsupported';
     if (!this.child || this.child.killed) return 'not-running';
     if (this.paused) return 'already-paused';
     if (!this.signalGroup('SIGSTOP')) return 'signal-failed';
@@ -189,7 +199,8 @@ export class PlaywrightRunner {
     return 'ok';
   }
 
-  resume(): 'ok' | 'not-running' | 'not-paused' | 'signal-failed' {
+  resume(): 'ok' | 'not-running' | 'not-paused' | 'signal-failed' | 'unsupported' {
+    if (!canSuspend) return 'unsupported';
     if (!this.child || this.child.killed) return 'not-running';
     if (!this.paused) return 'not-paused';
     if (!this.signalGroup('SIGCONT')) return 'signal-failed';
@@ -200,6 +211,6 @@ export class PlaywrightRunner {
 
   /** Forceful shutdown for process-exit handlers. Does not clean up state. */
   terminate(): void {
-    if (this.child && !this.child.killed) this.child.kill('SIGTERM');
+    if (this.child && !this.child.killed) killTree(this.child, 'SIGTERM');
   }
 }
