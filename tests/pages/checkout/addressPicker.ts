@@ -180,7 +180,13 @@ export async function pickAddress(page: Page, log: Logger, region: ShippingRegio
     log(`  → clicking "${label}" to open autocomplete`);
     await searchToggle.scrollIntoViewIfNeeded().catch(() => undefined);
     await searchToggle.click({ force: true });
-    await page.waitForTimeout(800);
+    // Wait for the autocomplete input to actually render instead of a
+    // fixed sleep. Bounded so a missing toggle-target still surfaces.
+    await page
+      .locator('input[role="combobox"], input[autocomplete="off"][placeholder*="address" i]')
+      .first()
+      .waitFor({ state: 'visible', timeout: 3_000 })
+      .catch(() => undefined);
     return true;
   };
 

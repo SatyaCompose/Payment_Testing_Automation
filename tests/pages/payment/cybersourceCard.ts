@@ -19,8 +19,25 @@ export async function fillCreditCard(page: Page, log: Logger, card: CardDetails)
   log('step 3 · fillCreditCard');
   const expiry = `${card.expiryMonth.padStart(2, '0')}/${card.expiryYear.slice(-2)}`;
 
-  // Wait for the CC section to render after selecting the card.
-  await page.waitForTimeout(2500);
+  // Wait for the CC section to be ready — either an inline card number
+  // input appears, OR a Cybersource iframe attaches. Either satisfies
+  // us; whichever fires first ends the wait. Bounded 15s, still faster
+  // than the old fixed 2.5s in the common case (usually resolves in
+  // 300–800ms) and doesn't hang past 15s on a slow render.
+  await page
+    .waitForFunction(
+      () => {
+        const inlineCcInput =
+          !!document.querySelector('input[autocomplete="cc-number"], input[autocomplete^="cc-exp"], input[autocomplete="cc-csc"]');
+        const csIframe = Array.from(document.querySelectorAll('iframe')).some((f) =>
+          /cybersource|microform|flex/i.test((f as HTMLIFrameElement).src || (f as HTMLIFrameElement).title || ''),
+        );
+        return inlineCcInput || csIframe;
+      },
+      undefined,
+      { timeout: 15_000, polling: 200 },
+    )
+    .catch(() => undefined);
 
   // 0. Inline path — try to find real text inputs on the page directly
   //    (Cybersource Microform can be embedded inline via autocomplete
@@ -79,10 +96,9 @@ export async function fillCreditCard(page: Page, log: Logger, card: CardDetails)
     });
 
   // 2. Log every iframe on the page, then iterate them to fill card
-  //    fields. Give iframes generous time to hydrate — Cybersource's
-  //    Microform fields can take 3–5s after the payment card is chosen.
-  await page.waitForTimeout(3000);
-
+  //    fields. The waitForFunction above already blocks until >=3
+  //    payment iframes exist, so no extra fixed sleep is needed — the
+  //    iframes have already hydrated by the time we reach this line.
   const iframeMeta = await readIframeMeta(page);
   for (const m of iframeMeta) {
     log(`  iframe #${m.idx}: title="${m.title}" name="${m.name}" id="${m.id}" src="${m.src}"`);

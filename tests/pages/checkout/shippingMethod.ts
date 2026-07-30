@@ -22,6 +22,16 @@ export async function selectShippingMethod(
   // "hasNotText" filter below rules out sibling / parent containers.
   const targetRe = new RegExp(escapeRegex(target), 'i');
 
+  // Cart items that don't ship to the saved address trigger a conflict
+  // modal *before* the shipping cards render. Options KWH offers:
+  //   • Select another store          (opens the CNC store list)
+  //   • Ship all items instead        (forces standard/express delivery)
+  //   • Remove low stock items and continue
+  // We want the shipping method the test asked for. If the target is
+  // 'cnc', pick "Select another store"; otherwise pick "Ship all items
+  // instead" so the shipping method cards below render normally.
+  await resolveShippingConflictIfPresent(page, log, method);
+
   // Wait for the shipping section to render fully.
   await page
     .waitForFunction(
@@ -178,7 +188,13 @@ export async function selectShippingMethod(
     log(`  · click failed: ${err.message?.split('\n')[0]} — trying JS click`);
     return target_loc.evaluate((el: HTMLElement) => el.click());
   });
-  await page.waitForTimeout(400);
+  // Wait for the KWH loading overlay (if any) rather than a fixed sleep.
+  // Returns instantly when no overlay is present, so pass-through is cheap.
+  await page
+    .locator('div.fixed.inset-0.bg-gray-200, div[class*="loading"][class*="fixed"]')
+    .first()
+    .waitFor({ state: 'hidden', timeout: 2_000 })
+    .catch(() => undefined);
 
   // Verify by reading which card is currently selected on the page.
   const currentlySelected = await readCurrentlySelectedCardText(page);
@@ -263,6 +279,106 @@ export async function selectShippingMethod(
     );
   }
   log(`  ✓ ${method} shipping selected (verified)`);
+}
+
+/**
+ * Detect and resolve the "cart has items that don't ship to your saved
+ * address" modal. Renders BEFORE the shipping method cards, so leaving
+ * it unresolved makes every downstream shipping locator return zero
+ * matches. Idempotent: no-op if no such modal is present.
+ */
+async function resolveShippingConflictIfPresent(
+  page: Page,
+  log: Logger,
+  method: ShippingMethod,
+): Promise<void> {
+  // The tell-tale option: "Ship all items instead". Fast probe — the
+  // modal's action buttons show up as radio-like <label>s wrapping a
+  // checkbox in the same KWH pattern as the shipping method cards.
+  const shipAllRe = /ship all items instead/i;
+  const shipAllProbe = page.getByText(shipAllRe).first();
+  const shipAllVisible = await shipAllProbe
+    .isVisible({ timeout: 3_000 })
+    .catch(() => false);
+  if (!shipAllVisible) return;
+
+  const targetActionRe = method === 'cnc' ? /select another store/i : shipAllRe;
+  const targetLabel = method === 'cnc' ? 'Select another store' : 'Ship all items instead';
+  log(`  ! shipping-conflict modal present — selecting "${targetLabel}"`);
+
+  // Try increasingly forceful strategies — same escalation ladder as the
+  // shipping method click. KWH cards are <label>-wrapped sr-only checkboxes
+  // that sometimes don't respond to synthesized clicks on React 18.
+  const label = page
+    .locator('label')
+    .filter({ hasText: targetActionRe })
+    .filter({ has: page.locator('input[type="checkbox"]') })
+    .first();
+  const labelCount = await label.count().catch(() => 0);
+  if (labelCount > 0) {
+    const inputInside = label.locator('input[type="checkbox"]').first();
+    await label.scrollIntoViewIfNeeded({ timeout: 3_000 }).catch(() => undefined);
+    const strategies: { name: string; fn: () => Promise<unknown> }[] = [
+      { name: 'label.click', fn: () => label.click({ force: true, timeout: 5_000 }) },
+      { name: 'input.click', fn: () => inputInside.click({ force: true, timeout: 5_000 }) },
+      { name: 'input.evaluate.click', fn: () => inputInside.evaluate((el: HTMLInputElement) => el.click()) },
+      {
+        name: 'native setter + change',
+        fn: () =>
+          inputInside.evaluate((el: HTMLInputElement) => {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+            setter?.call(el, true);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }),
+      },
+    ];
+    for (const s of strategies) {
+      await s.fn().catch(() => undefined);
+      if (await inputInside.isChecked().catch(() => false)) {
+        log(`  · conflict option toggled via "${s.name}"`);
+        break;
+      }
+    }
+  } else {
+    log(`  · no <label> match for "${targetLabel}" — trying plain button/text click`);
+    await page
+      .locator('button, [role="button"], label, div, span')
+      .filter({ hasText: targetActionRe })
+      .first()
+      .click({ force: true, timeout: 5_000 })
+      .catch(() => undefined);
+  }
+
+  // Some KWH modals render an explicit confirm button after selection
+  // (Continue / Confirm / Save / Update / Apply). Click whichever is
+  // visible; harmless if none is present.
+  const confirmBtn = page
+    .locator('button, [role="button"], input[type="submit"]')
+    .filter({ hasText: /^\s*(continue|confirm|save|apply|update|ok|proceed)\s*$/i })
+    .filter({ visible: true })
+    .first();
+  if (await confirmBtn.count().catch(() => 0)) {
+    const confirmLabel = ((await confirmBtn.textContent().catch(() => null)) ?? '').trim();
+    log(`  · clicking confirm button "${confirmLabel}"`);
+    await confirmBtn.click({ force: true, timeout: 5_000 }).catch(() => undefined);
+  }
+
+  // Wait for the modal to dismiss AND the shipping section to render.
+  // If the modal stays up, the shipping-method locators below will still
+  // return zero and the outer diagnostic dump will surface it.
+  await page
+    .waitForFunction(
+      () => {
+        const txt = document.body.innerText;
+        const conflictGone = !/ship all items instead|remove low stock items/i.test(txt);
+        const shippingRendered = /standard shipping|express shipping|international shipping/i.test(txt);
+        return conflictGone && shippingRendered;
+      },
+      undefined,
+      { timeout: 15_000, polling: 500 },
+    )
+    .catch(() => log('  · conflict-modal wait timed out — proceeding anyway'));
 }
 
 /**

@@ -7,16 +7,25 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 const STAGING_URL = process.env.STAGING_URL ?? 'https://staging.example.com';
 const IS_CI = !!process.env.CI;
 
+// Local parallelism — one browser window per worker. Bumping workers
+// runs multiple spec files simultaneously (different files can run in
+// parallel; tests within one file still run sequentially in that
+// worker's shared context, which avoids race conditions on the
+// logged-in / guest-existing email addresses that both single-session
+// providers might reject if double-logged-in). Override via env when
+// you know your hardware and provider limits can take more.
+const WORKERS = Number(process.env.PW_WORKERS ?? (IS_CI ? 1 : 3));
+
 export default defineConfig({
   testDir: './tests',
   globalSetup: require.resolve('./tests/globalSetup'),
   globalTeardown: require.resolve('./tests/globalTeardown'),
-  // Sequential: one browser window at a time, one test at a time.
-  // Each test still gets a fresh context (with the saved storageState),
-  // so the "signed in" state carries across, but the window opens and
-  // drives one test to completion before the next starts.
+  // Cross-file parallel, in-file sequential. Each worker owns one
+  // browser context (see fixtures/index.ts sharedContext) that runs its
+  // assigned tests back-to-back — cheaper than tearing down + relaunching
+  // per test.
   fullyParallel: false,
-  workers: 1,
+  workers: WORKERS,
   forbidOnly: IS_CI,
   retries: IS_CI ? 2 : 0,
   // Full checkout flow (search → product → cart → shipping → payment → confirm)

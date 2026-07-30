@@ -12,7 +12,7 @@
     "test:webkit": "playwright test --project=safari-desktop",
     "test:mobile-safari": "playwright test --project=mobile-safari",
     "test:android": "playwright test --project=android-chrome",
-    "test:cc": "playwright test tests/payments/credit-card.spec.ts",
+    "test:cc": "playwright test tests/payments/credit-card",
     "test:paypal": "playwright test tests/payments/paypal",
     "test:afterpay": "playwright test tests/payments/afterpay",
     "test:gpay": "playwright test tests/payments/gpay",

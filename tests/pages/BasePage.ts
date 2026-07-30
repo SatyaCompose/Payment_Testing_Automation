@@ -37,8 +37,11 @@ export abstract class BasePage {
       .catch(() => undefined);
   }
 
-  async waitForIdle(): Promise<void> {
-    await this.page.waitForLoadState('networkidle');
+  async waitForIdle(timeoutMs = 8_000): Promise<void> {
+    // Next.js keeps opening chunks/telemetry sockets so `networkidle`
+    // can hang the full navigation timeout on a healthy page. Cap it —
+    // if the site never truly idles, callers still get control back.
+    await this.page.waitForLoadState('networkidle', { timeout: timeoutMs }).catch(() => undefined);
   }
 
   async expectUrlToInclude(fragment: string): Promise<void> {

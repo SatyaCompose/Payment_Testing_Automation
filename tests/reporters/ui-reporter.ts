@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import type { FullConfig, FullResult, Reporter, Suite, TestCase, TestResult } from '@playwright/test/reporter';
 
 /**
@@ -76,7 +77,7 @@ export default class UiReporter implements Reporter {
   }
 
   private relFile(test: TestCase): string {
-    return test.location.file.replace(process.cwd() + '/', '');
+    return path.relative(process.cwd(), test.location.file).split(path.sep).join('/');
   }
 
   private emit(payload: unknown): void {
