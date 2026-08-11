@@ -17,14 +17,20 @@ export async function proceedToCheckout(
 ): Promise<void> {
   log('proceeding to checkout');
 
-  // Prefer data-testid; fall back to text.
+  // Prefer data-testid; fall back to a role-scoped match. Naked text
+  // match on "Secure checkout" catches the mobile header badge (a
+  // decorative span next to the cart icon) even when the flyout is
+  // closed — that yields a locator that resolves-then-times-out on
+  // click because the badge isn't a button. Restrict to button/link
+  // roles + require visibility so the flyout element wins.
   const secureCheckout = page
     .getByTestId('checkout-button')
     .or(
       page
-        .locator('button, [role="button"], a, input[type="submit"], input[type="button"]')
-        .filter({ hasText: /secure\s*checkout/i }),
+        .getByRole('button', { name: /secure\s*checkout/i })
+        .or(page.getByRole('link', { name: /secure\s*checkout/i })),
     )
+    .filter({ visible: true })
     .first();
 
   if (await secureCheckout.count().catch(() => 0)) {

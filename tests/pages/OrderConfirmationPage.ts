@@ -53,6 +53,149 @@ export class OrderConfirmationPage extends BasePage {
   }
 
   /**
+   * Open the mobile "Order summary" accordion if it's currently
+   * collapsed. Real Playwright clicks (not DOM `.click()`) so React
+   * onClick handlers fire. Escalates through: the heading text, its
+   * parent, its clickable ancestor, and a nearby chevron icon. Verifies
+   * success by looking for the "Subtotal" line after each attempt.
+   *
+   * No-op when Subtotal is already visible (desktop, or a mobile skin
+   * that renders the accordion open by default).
+   */
+  private async expandOrderSummary(): Promise<void> {
+    const subtotal = this.page.getByText(/^\s*subtotal\s*/i).first();
+    if (await subtotal.isVisible().catch(() => false)) {
+      // eslint-disable-next-line no-console
+      console.log('[OrderConfirmationPage] order-summary: already open (Subtotal visible)');
+      return;
+    }
+
+    // Locate the heading. Prefer a role=heading match (accessible name
+    // usually maps to the visible label), then fall back to a strict
+    // text-node match anywhere on the page.
+    const heading = this.page
+      .getByRole('heading', { name: /^\s*order\s*summary\s*$/i })
+      .or(this.page.getByText(/^\s*order\s*summary\s*$/i))
+      .first();
+
+    if (!(await heading.isVisible().catch(() => false))) {
+      // eslint-disable-next-line no-console
+      console.log('[OrderConfirmationPage] order-summary: no "Order summary" heading found');
+      return;
+    }
+
+    // Detect whether this browser context emulates touch (mobile
+    // projects). Some KWH accordion handlers only listen on touchend,
+    // not click, so a synthesized mouse click on a mobile viewport
+    // dispatches without triggering the toggle.
+    const hasTouch = await this.page
+      .evaluate(() => 'ontouchstart' in window || navigator.maxTouchPoints > 0)
+      .catch(() => false);
+
+    const headingParent = heading.locator('..');
+    const grandparent = headingParent.locator('..');
+    const chevron = headingParent
+      .locator('svg, button, [role="button"], [class*="chevron" i], [class*="arrow" i]')
+      .first();
+    // The accordion header ROW — the widest ancestor whose click
+    // handler covers both the label and the chevron. KWH typically
+    // marks it with role="button" or cursor:pointer.
+    const rowAncestor = heading
+      .locator(
+        'xpath=ancestor::*[self::button or @role="button" or contains(@class, "accordion") or contains(@class, "collapsible") or contains(@class, "toggle")][1]',
+      )
+      .first();
+
+    const attempts: Array<{
+      label: string;
+      run: () => Promise<void>;
+    }> = [
+      { label: 'heading click', run: () => heading.click({ force: true, timeout: 3_000 }) },
+      { label: 'heading parent click', run: () => headingParent.click({ force: true, timeout: 3_000 }) },
+      { label: 'grandparent click', run: () => grandparent.click({ force: true, timeout: 3_000 }) },
+      { label: 'chevron click', run: () => chevron.click({ force: true, timeout: 3_000 }) },
+      { label: 'row-ancestor click', run: () => rowAncestor.click({ force: true, timeout: 3_000 }) },
+    ];
+
+    // On mobile add tap variants and a coordinate click at the row's
+    // right edge (where the chevron sits — direct hit on the toggle
+    // even if the DOM structure is unusual).
+    if (hasTouch) {
+      attempts.push(
+        { label: 'heading TAP', run: () => heading.tap({ force: true, timeout: 3_000 }) },
+        { label: 'heading parent TAP', run: () => headingParent.tap({ force: true, timeout: 3_000 }) },
+        { label: 'chevron TAP', run: () => chevron.tap({ force: true, timeout: 3_000 }) },
+        {
+          label: 'coord click at chevron edge',
+          run: async () => {
+            const box = await headingParent.boundingBox().catch(() => null);
+            if (!box) throw new Error('no bounding box');
+            // Chevron sits at the right edge of the row (see the 4.2
+            // screenshot). Click 20px inside the right edge, vertical
+            // centre.
+            const x = box.x + Math.max(0, box.width - 20);
+            const y = box.y + box.height / 2;
+            await this.page.mouse.click(x, y);
+          },
+        },
+      );
+    }
+
+    for (const { label, run } of attempts) {
+      // eslint-disable-next-line no-console
+      console.log(`[OrderConfirmationPage] order-summary: trying ${label}`);
+      await heading.scrollIntoViewIfNeeded().catch(() => undefined);
+      await run().catch((err: Error) => {
+        // eslint-disable-next-line no-console
+        console.log(`[OrderConfirmationPage]   · ${label} threw: ${err.message?.split('\n')[0]}`);
+      });
+      const opened = await subtotal
+        .waitFor({ state: 'visible', timeout: 1_500 })
+        .then(() => true)
+        .catch(() => false);
+      if (opened) {
+        // eslint-disable-next-line no-console
+        console.log(`[OrderConfirmationPage] order-summary: opened via ${label}`);
+        await this.page.waitForTimeout(300);
+        return;
+      }
+    }
+
+    // All strategies missed — dump the heading's ancestor chain so we
+    // can see exactly what KWH renders (event listeners, class names,
+    // wrapping tag types). This diagnostic is what tells us where the
+    // real click handler lives.
+    const diagnostic = await heading
+      .evaluate((el: Element) => {
+        const trail: Array<Record<string, unknown>> = [];
+        let node: Element | null = el;
+        for (let i = 0; i < 6 && node && node !== document.body; i++) {
+          const rect = (node as HTMLElement).getBoundingClientRect();
+          const cs = window.getComputedStyle(node as HTMLElement);
+          trail.push({
+            level: i,
+            tag: node.tagName.toLowerCase(),
+            role: node.getAttribute('role'),
+            testid: node.getAttribute('data-testid'),
+            className: (node.getAttribute('class') || '').slice(0, 80),
+            id: node.getAttribute('id'),
+            cursor: cs.cursor,
+            pointerEvents: cs.pointerEvents,
+            rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
+            text: (node.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60),
+          });
+          node = node.parentElement;
+        }
+        return trail;
+      })
+      .catch(() => null);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[OrderConfirmationPage] order-summary: ALL strategies missed. Heading ancestor chain: ${JSON.stringify(diagnostic)}`,
+    );
+  }
+
+  /**
    * Screenshot into
    *   screenshots/<testId>/<browser>-order-confirmation.png
    *
@@ -87,6 +230,12 @@ export class OrderConfirmationPage extends BasePage {
       .catch(() => undefined);
     // Small buffer for any fade-in / late layout shift.
     await this.page.waitForTimeout(500);
+
+    // Mobile confirmation collapses the "Order summary" accordion by
+    // default — the line-item breakdown + subtotal / shipping / total
+    // lives inside. Expand it before snapping so the archive shot
+    // captures the whole receipt. Desktop already renders it open.
+    await this.expandOrderSummary();
 
     // The floating red cursor overlay (from utils/cursorOverlay.ts) is
     // injected on every page for headed-run visibility, but must not

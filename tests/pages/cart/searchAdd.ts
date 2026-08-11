@@ -174,24 +174,89 @@ async function doAddRandomProductFromSearch(
   }
 
   log('STEP 6/6 · clicking Add to cart');
+  // Strict role-based match on the accessible NAME rules out:
+  //   • related-products card wrappers whose textContent happens to
+  //     contain "Add to cart" (e.g. a "Add to cart button" caption
+  //     inside a carousel item on mobile).
+  //   • sticky "Buy now" bars that mount off-screen.
+  //   • large layout divs whose text spans multiple product tiles.
+  // Filter `visible: true` so off-screen carousel copies (which are
+  // sometimes first in DOM order on mobile) are excluded — that's the
+  // silent "clicking somewhere else" case: the button click "succeeded"
+  // but landed on a hidden related-products tile that opens a mini
+  // wishlist modal instead of the main cart flyout.
   const addBtn = page
-    .locator('button, [role="button"], a, input[type="submit"], input[type="button"]')
-    .filter({ hasText: /add\s*to\s*(cart|bag)/i })
+    .getByRole('button', { name: /^\s*add\s*to\s*(cart|bag)\s*$/i })
+    .filter({ visible: true })
+    .or(
+      page
+        .locator('button, [role="button"], input[type="submit"], input[type="button"]')
+        .filter({ hasText: /^\s*add\s*to\s*(cart|bag)\s*$/i })
+        .filter({ visible: true }),
+    )
     .first();
   if (!(await addBtn.count().catch(() => 0))) {
-    throw new Error('No "Add to cart" button found on product page');
+    throw new Error('No visible "Add to cart" button found on product page');
   }
+  const addBtnMeta = await addBtn
+    .evaluate((el: Element) => {
+      const r = el.getBoundingClientRect();
+      return {
+        tag: el.tagName.toLowerCase(),
+        text: (el.textContent || '').trim().slice(0, 40).replace(/\s+/g, ' '),
+        className: (el.getAttribute('class') || '').slice(0, 60),
+        testid: el.getAttribute('data-testid') || null,
+        rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      };
+    })
+    .catch(() => null);
+  log(`  → clicking Add to cart: ${JSON.stringify(addBtnMeta)}`);
   await addBtn.scrollIntoViewIfNeeded().catch(() => undefined);
   await expect(addBtn).toBeEnabled({ timeout: 10_000 });
   await addBtn.click({ force: true });
 
-  // Wait for the "Secure Checkout" button in the flyout to appear.
+  // Wait for the cart drawer's "Secure Checkout" BUTTON (not the header
+  // "Secure checkout" badge). The site header on mobile renders a
+  // <div>/<span> reading "Secure checkout" next to the cart icon — a
+  // naked text-substring wait matched that badge and reported success
+  // even when the flyout never opened, making the downstream
+  // proceedToCheckout probe hang for 20s. Prefer the flyout-specific
+  // data-testid; fall back to a role-scoped match on the accessible
+  // name so header decorations are excluded.
   const secureCheckoutBtn = page
-    .locator('button, [role="button"], a, input[type="submit"]')
-    .filter({ hasText: /secure\s*checkout/i })
+    .getByTestId('checkout-button')
+    .or(
+      page
+        .getByRole('button', { name: /secure\s*checkout/i })
+        .or(page.getByRole('link', { name: /secure\s*checkout/i })),
+    )
+    .filter({ visible: true })
     .first();
-  await expect(secureCheckoutBtn).toBeVisible({ timeout: 20_000 });
-  log('  ✓ product added — Secure Checkout button is visible');
+  try {
+    await expect(secureCheckoutBtn).toBeVisible({ timeout: 20_000 });
+    log('  ✓ product added — Secure Checkout button is visible in the flyout');
+  } catch (err) {
+    // Dump anything on the page whose text mentions "checkout" so a
+    // future re-run can tell whether the flyout didn't open, or opened
+    // under a different accessible name.
+    const diag = await page
+      .locator('button, [role="button"], a, [role="link"]')
+      .filter({ hasText: /checkout/i })
+      .evaluateAll((els) =>
+        els.slice(0, 8).map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent || '').trim().slice(0, 40),
+          testid: el.getAttribute('data-testid') || null,
+          role: el.getAttribute('role') || null,
+          visible:
+            (el as HTMLElement).getBoundingClientRect().width > 0 &&
+            (el as HTMLElement).offsetParent !== null,
+        })),
+      )
+      .catch(() => []);
+    log(`  ! flyout Secure Checkout button not visible in 20s. Nearby checkout-labelled elements: ${JSON.stringify(diag)}`);
+    throw err;
+  }
 
   return term;
 }

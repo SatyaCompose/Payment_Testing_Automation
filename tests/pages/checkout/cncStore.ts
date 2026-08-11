@@ -31,12 +31,27 @@ const DRAWER_TRIGGER_PATTERNS: RegExp[] = [
 export async function selectClickAndCollectTab(page: Page, log: Logger): Promise<void> {
   log('step 2 · switching to Click & Collect tab');
 
+  // Mobile checkout renders the Delivery / Click & Collect switcher as
+  // a plain <div> card or a segmented control — no role=tab/button/link.
+  // Match any visible element whose accessible name OR text content
+  // reads as a CNC label, including the widely-styled div/span cases.
+  // `visible: true` filters out the hidden desktop copy that mobile
+  // layouts sometimes keep in the DOM.
   const tab = page
     .getByRole('tab', { name: CNC_TAB_RE })
     .or(page.getByRole('radio', { name: CNC_TAB_RE }))
     .or(page.getByRole('button', { name: CNC_TAB_RE }))
     .or(page.getByRole('link', { name: CNC_TAB_RE }))
     .or(page.locator('label').filter({ hasText: CNC_TAB_RE }))
+    .or(
+      // Mobile fallback — any visible clickable-ish element with the
+      // right text and a compact size (rules out page-level wrappers
+      // whose text contains the phrase across many descendants).
+      page
+        .locator('div, span, li, [tabindex], [class*="tab" i], [class*="option" i], [class*="segment" i]')
+        .filter({ hasText: CNC_TAB_RE }),
+    )
+    .filter({ visible: true })
     .first();
 
   try {
@@ -46,24 +61,66 @@ export async function selectClickAndCollectTab(page: Page, log: Logger): Promise
     throw new Error('No "Click & Collect" tab at step 2 — refusing to fall through to delivery.');
   }
 
-  const label = ((await tab.textContent().catch(() => null)) ?? '').trim();
-  log(`  → clicking "${label.slice(0, 60)}"`);
+  const meta = await tab
+    .evaluate((el: Element) => {
+      const r = el.getBoundingClientRect();
+      return {
+        tag: el.tagName.toLowerCase(),
+        role: el.getAttribute('role'),
+        className: (el.getAttribute('class') || '').slice(0, 60),
+        text: (el.textContent || '').trim().slice(0, 40),
+        rect: { w: Math.round(r.width), h: Math.round(r.height) },
+      };
+    })
+    .catch(() => null);
+  log(`  → clicking CNC tab: ${JSON.stringify(meta)}`);
   await tab.scrollIntoViewIfNeeded().catch(() => undefined);
-  await tab.click({ force: true });
 
-  const layoutReady = await page
-    .getByText(CNC_LAYOUT_MARKER_RE)
-    .first()
-    .waitFor({ state: 'visible', timeout: 12_000 })
-    .then(() => true)
+  // Real gesture first. If nothing happens (mobile handlers listening
+  // only on touchend), escalate to tap → coordinate click.
+  const hasTouch = await page
+    .evaluate(() => 'ontouchstart' in window || navigator.maxTouchPoints > 0)
     .catch(() => false);
-  if (!layoutReady) {
-    await logCncPageSnapshot(page, log);
-    throw new Error(
-      'Clicked "Click & Collect" but the CNC layout markers did not appear — refusing to fall through to delivery.',
-    );
+
+  const clickStrategies: Array<{ label: string; run: () => Promise<void> }> = [
+    { label: 'click', run: () => tab.click({ force: true, timeout: 5_000 }) },
+  ];
+  if (hasTouch) {
+    clickStrategies.push({ label: 'tap', run: () => tab.tap({ force: true, timeout: 5_000 }) });
+    clickStrategies.push({
+      label: 'coord tap centre',
+      run: async () => {
+        const box = await tab.boundingBox().catch(() => null);
+        if (!box) throw new Error('no bounding box');
+        await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      },
+    });
   }
-  log('  ✓ Click & Collect layout is active');
+  clickStrategies.push({
+    label: 'DOM el.click()',
+    run: () => tab.evaluate((el: HTMLElement) => el.click()),
+  });
+
+  for (const { label, run } of clickStrategies) {
+    log(`  · try ${label}`);
+    await run().catch((err: Error) => log(`    · ${label} threw: ${err.message?.split('\n')[0]}`));
+    const layoutReady = await page
+      .getByText(CNC_LAYOUT_MARKER_RE)
+      .first()
+      .waitFor({ state: 'visible', timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (layoutReady) {
+      log(`  ✓ Click & Collect layout is active (via ${label})`);
+      return;
+    }
+    log(`  · ${label} did not switch layout — escalating`);
+  }
+
+  await logCncPageSnapshot(page, log);
+  throw new Error(
+    'Clicked "Click & Collect" through every strategy but the CNC layout markers did not appear — refusing to fall through to delivery.',
+  );
 }
 
 /**
