@@ -5,7 +5,10 @@ import {
   escapeRegex,
   otherMethodLabels,
   readCurrentlySelectedCardText,
+  shippingMethodAliases,
   shippingMethodLabel,
+  shippingMethodTargetRe,
+  shippingOtherMethodsRe,
   verifyShippingSelection,
   visibleOtherLabels,
 } from './shippingSelection';
@@ -17,10 +20,13 @@ export async function selectShippingMethod(
 ): Promise<void> {
   log(`step 2 · selectShippingMethod ${method}`);
   const target = shippingMethodLabel[method];
-  // Unanchored — cards contain the label PLUS a description line, so
-  // exact-match would filter them out. Substring is enough because the
-  // "hasNotText" filter below rules out sibling / parent containers.
-  const targetRe = new RegExp(escapeRegex(target), 'i');
+  const targetAliases = shippingMethodAliases[method];
+  // Alias-aware — KWH sometimes labels the international card as
+  // "New Zealand delivery" / "Standard International" rather than the
+  // canonical "International shipping". Match any known alias so a
+  // renamed card is still located instead of silently failing at the
+  // final text fallback.
+  const targetRe = shippingMethodTargetRe(method);
 
   // Cart items that don't ship to the saved address trigger a conflict
   // modal *before* the shipping cards render. Options KWH offers:
@@ -32,24 +38,35 @@ export async function selectShippingMethod(
   // instead" so the shipping method cards below render normally.
   await resolveShippingConflictIfPresent(page, log, method);
 
-  // Wait for the shipping section to render fully.
+  // Wait for the shipping section to render at least ONE recognisable
+  // card. Previously required both "Standard shipping" AND (Express OR
+  // CNC) which timed out on international destinations that only offer
+  // a single option under a per-country label ("New Zealand delivery",
+  // etc.). Now we wait for any known alias, keyed off the current
+  // target so the wait is meaningful for the case being tested.
+  const targetAliasList = shippingMethodAliases[method]
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
   await page
     .waitForFunction(
-      () =>
-        /standard shipping/i.test(document.body.innerText) &&
-        /(express shipping|click.?and.?collect)/i.test(document.body.innerText),
-      undefined,
+      (aliasPattern: string) => new RegExp(aliasPattern, 'i').test(document.body.innerText),
+      targetAliasList,
       { timeout: 25_000, polling: 500 },
     )
     .catch(() => {
-      log('  ! shipping section did not fully render — will still try');
+      log(`  ! shipping section did not render "${target}" (or an alias) in 25s — will still try`);
     });
 
   // Special case: only ONE shipping method is offered (typical for
-  // international destinations — "International shipping" is the only
-  // option). No selection needed and no explicit "selected" indicator
-  // will be rendered because there's nothing to switch between.
-  const others = otherMethodLabels(method);
+  // international destinations — the international card is often the
+  // only option). No selection needed and no explicit "selected"
+  // indicator will be rendered because there's nothing to switch between.
+  // `others` intentionally spans ALL alias forms of the non-target
+  // methods so a card renamed to "Standard delivery" is still recognised
+  // as "another method visible".
+  const others = (Object.keys(shippingMethodAliases) as ShippingMethod[])
+    .filter((m) => m !== method)
+    .flatMap((m) => shippingMethodAliases[m]);
   const otherLabelsVisible = await visibleOtherLabels(page, others);
   if (otherLabelsVisible.length === 0) {
     const targetVisible = await page.getByText(targetRe).first().isVisible().catch(() => false);
@@ -119,23 +136,18 @@ export async function selectShippingMethod(
     const kwhCardText = ((await label.textContent().catch(() => null)) ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
     log(`  → clicking KWH label: "${kwhCardText}"`);
 
-    // Try increasingly forceful click strategies. React-controlled checkboxes
-    // sometimes ignore synthesized clicks; we escalate to the native setter
-    // + change-event dispatch, which is how React tests trigger onChange.
+    // Real-gesture strategies only. A prior "native setter + change
+    // dispatch" fallback set the DOM `checked` attribute directly, but
+    // KWH's React state never picked it up — verifyShippingSelection
+    // then saw `:checked` on the target and reported success while the
+    // server-side shipping method stayed at Standard. Result: Express
+    // orders (e.g. 2.3) shipped as Standard. Do not reintroduce the
+    // synthetic dispatch — if none of the three real clicks toggle the
+    // input, fail loudly downstream.
     const tryStrategies: { name: string; fn: () => Promise<unknown> }[] = [
       { name: 'label.click', fn: () => label.click({ force: true, timeout: 5_000 }) },
       { name: 'input.click (Playwright)', fn: () => inputInside.click({ force: true, timeout: 5_000 }) },
       { name: 'input.evaluate.click', fn: () => inputInside.evaluate((el: HTMLInputElement) => el.click()) },
-      {
-        name: 'native setter + change dispatch',
-        fn: () =>
-          inputInside.evaluate((el: HTMLInputElement) => {
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
-            setter?.call(el, true);
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          }),
-      },
     ];
 
     let nowChecked = false;
@@ -292,18 +304,39 @@ async function resolveShippingConflictIfPresent(
   log: Logger,
   method: ShippingMethod,
 ): Promise<void> {
-  // The tell-tale option: "Ship all items instead". Fast probe — the
-  // modal's action buttons show up as radio-like <label>s wrapping a
-  // checkbox in the same KWH pattern as the shipping method cards.
-  const shipAllRe = /ship all items instead/i;
-  const shipAllProbe = page.getByText(shipAllRe).first();
-  const shipAllVisible = await shipAllProbe
-    .isVisible({ timeout: 3_000 })
+  // KWH shows two families of conflict banners at checkout, depending on
+  // WHY the cart can't ship to the current address:
+  //   A) "Some items ship from a different store" — options:
+  //        - Select another store
+  //        - Ship all items instead
+  //        - Remove low stock items and continue
+  //   B) "Items unavailable for delivery" — options:
+  //        - Remove unavailable items and continue with shipping
+  //        - Click and Collect all items instead
+  // Both render the KWH sr-only-checkbox pattern. Detect either.
+  // Probe via document.body.innerText so a below-fold banner (common on
+  // the 390×844 mobile viewport) still counts as "present". Playwright's
+  // isVisible on `.first()` returned false for these banners because the
+  // first DOM match was inside a display:none aria-live region.
+  const conflictPresent = await page
+    .evaluate(() =>
+      /(ship all items instead|remove low stock items|this product is currently not available for delivery|remove unavailable items and continue|click and collect all items instead)/i.test(
+        document.body.innerText,
+      ),
+    )
     .catch(() => false);
-  if (!shipAllVisible) return;
+  if (!conflictPresent) return;
 
-  const targetActionRe = method === 'cnc' ? /select another store/i : shipAllRe;
-  const targetLabel = method === 'cnc' ? 'Select another store' : 'Ship all items instead';
+  // Pick the resolution that preserves the requested shipping mode.
+  // For method='cnc' we accept EITHER "Select another store" (store
+  // mismatch) or "Click and Collect all items instead" (unavailable).
+  // For any delivery method we prefer options that keep the user on
+  // delivery: "Ship all items instead" > "Remove unavailable items".
+  const targetActionRe =
+    method === 'cnc'
+      ? /select another store|click and collect all items instead/i
+      : /ship all items instead|remove unavailable items and continue/i;
+  const targetLabel = method === 'cnc' ? 'CNC option' : 'delivery option';
   log(`  ! shipping-conflict modal present — selecting "${targetLabel}"`);
 
   // Try increasingly forceful strategies — same escalation ladder as the
@@ -318,20 +351,14 @@ async function resolveShippingConflictIfPresent(
   if (labelCount > 0) {
     const inputInside = label.locator('input[type="checkbox"]').first();
     await label.scrollIntoViewIfNeeded({ timeout: 3_000 }).catch(() => undefined);
+    // Real-gesture strategies only — see the note in selectShippingMethod
+    // above. Synthetic native-setter dispatch toggles the DOM `checked`
+    // attribute without informing React, so the DOM looks right while
+    // the site's state is unchanged.
     const strategies: { name: string; fn: () => Promise<unknown> }[] = [
       { name: 'label.click', fn: () => label.click({ force: true, timeout: 5_000 }) },
       { name: 'input.click', fn: () => inputInside.click({ force: true, timeout: 5_000 }) },
       { name: 'input.evaluate.click', fn: () => inputInside.evaluate((el: HTMLInputElement) => el.click()) },
-      {
-        name: 'native setter + change',
-        fn: () =>
-          inputInside.evaluate((el: HTMLInputElement) => {
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
-            setter?.call(el, true);
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          }),
-      },
     ];
     for (const s of strategies) {
       await s.fn().catch(() => undefined);
@@ -350,35 +377,67 @@ async function resolveShippingConflictIfPresent(
       .catch(() => undefined);
   }
 
-  // Some KWH modals render an explicit confirm button after selection
-  // (Continue / Confirm / Save / Update / Apply). Click whichever is
-  // visible; harmless if none is present.
+  // Broad submit-button lookup — the KWH modal sometimes labels its
+  // commit button with more than one word (e.g. "Continue to shipping",
+  // "Apply changes", "Confirm selection"). Match any short button text
+  // containing one of the commit verbs, prioritising modal-scoped
+  // buttons over the page-level Continue.
+  const confirmVerbRe = /(continue|confirm|save|apply|update|ok|proceed)/i;
   const confirmBtn = page
-    .locator('button, [role="button"], input[type="submit"]')
-    .filter({ hasText: /^\s*(continue|confirm|save|apply|update|ok|proceed)\s*$/i })
-    .filter({ visible: true })
+    .locator('button:visible, [role="button"]:visible, input[type="submit"]:visible')
+    .filter({ hasText: confirmVerbRe })
+    .filter({ hasNotText: /back to cart|log ?out|show|hide|view (my )?cart/i })
     .first();
   if (await confirmBtn.count().catch(() => 0)) {
-    const confirmLabel = ((await confirmBtn.textContent().catch(() => null)) ?? '').trim();
-    log(`  · clicking confirm button "${confirmLabel}"`);
+    const confirmLabel = ((await confirmBtn.textContent().catch(() => null)) ?? '').trim().slice(0, 60);
+    log(`  · clicking confirm-like button "${confirmLabel}"`);
     await confirmBtn.click({ force: true, timeout: 5_000 }).catch(() => undefined);
+  } else {
+    log('  · no confirm button found — relying on auto-apply');
   }
 
-  // Wait for the modal to dismiss AND the shipping section to render.
-  // If the modal stays up, the shipping-method locators below will still
-  // return zero and the outer diagnostic dump will surface it.
-  await page
+  // Wait for the banner text to disappear AND the shipping section to
+  // remain rendered. Includes the "delivery/unavailable" variant.
+  const modalResolved = await page
     .waitForFunction(
       () => {
         const txt = document.body.innerText;
-        const conflictGone = !/ship all items instead|remove low stock items/i.test(txt);
+        const conflictGone =
+          !/ship all items instead|remove low stock items|this product is currently not available for delivery|remove unavailable items and continue|click and collect all items instead/i.test(
+            txt,
+          );
         const shippingRendered = /standard shipping|express shipping|international shipping/i.test(txt);
         return conflictGone && shippingRendered;
       },
       undefined,
-      { timeout: 15_000, polling: 500 },
+      { timeout: 8_000, polling: 500 },
     )
-    .catch(() => log('  · conflict-modal wait timed out — proceeding anyway'));
+    .then(() => true)
+    .catch(() => false);
+
+  if (modalResolved) {
+    log('  ✓ conflict resolved, shipping section is rendering');
+    return;
+  }
+
+  // Fallback: re-click the page-level "Continue to shipping" once. In
+  // some KWH revisions the resolution options auto-apply but the page
+  // waits for the user to advance step 1 again after they've been chosen.
+  log('  · conflict-modal wait timed out — re-clicking Continue to shipping as a nudge');
+  const continueBtn = page
+    .locator('button:visible, [role="button"]:visible')
+    .filter({ hasText: /continue\s*to\s*(shipping|delivery)/i })
+    .first();
+  if (await continueBtn.count().catch(() => 0)) {
+    await continueBtn.click({ force: true, timeout: 5_000 }).catch(() => undefined);
+    await page
+      .waitForFunction(
+        () => /standard shipping|express shipping|international shipping/i.test(document.body.innerText),
+        undefined,
+        { timeout: 8_000, polling: 500 },
+      )
+      .catch(() => log('  · shipping still not rendered after nudge — proceeding anyway'));
+  }
 }
 
 /**
@@ -394,10 +453,30 @@ export async function continueToPayment(
   page: Page,
   log: Logger,
   waitForOverlay: WaitForLoadingOverlay,
+  shippingMethodForConflict: ShippingMethod = 'standard',
 ): Promise<void> {
   log('step 2 → 3 · Continue to Payment');
 
   await waitForOverlay();
+
+  // Give the shipping section time to finish rendering. KWH fetches
+  // shipping options async after the customer step, and the "items
+  // unavailable" banner only paints once that fetch completes. Running
+  // the resolver too early (right after waitForOverlay) misses the
+  // banner and lets the failed button click surface first.
+  await page
+    .waitForFunction(
+      () => /standard shipping|express shipping|international shipping/i.test(document.body.innerText),
+      undefined,
+      { timeout: 8_000, polling: 300 },
+    )
+    .catch(() => undefined);
+
+  // If selectShippingMethod returned via the "already checked" fast-path
+  // it may not have seen the conflict banner (rendered BETWEEN the
+  // shipping cards and the Continue button). Re-run the resolver here
+  // so an unresolved banner doesn't silently block the button click.
+  await resolveShippingConflictIfPresent(page, log, shippingMethodForConflict);
 
   const continueRe = /continue\s*to\s*payment|proceed\s*to\s*payment/i;
   // Prefer a real <button> or role="button" with the accessible name —
@@ -452,11 +531,16 @@ export async function continueToPayment(
   });
 
   // Give the SPA a beat to react, then check if we advanced. Bumped
-  // from 2.5s → 8s: KWH staging often takes 5-7s to render the payment
-  // section on the first click; a shorter window forces a redundant
-  // 2nd click that itself triggers ~20s of extra network activity.
-  const quickTransition = await hasPaymentSectionRendered(page, 8_000);
+  // from 8s → 15s: mobile-safari can take 8-12s to render the payment
+  // section after a genuine click; a shorter window fires the retry
+  // logic even when the first click actually worked.
+  const quickTransition = await hasPaymentSectionRendered(page, 15_000);
   if (quickTransition) return finalizePaymentTransition(page, log);
+
+  // Between click attempts, re-check for the conflict banner. It
+  // sometimes renders async AFTER the first Continue click reveals
+  // validation state. Resolving it now unblocks the retry clicks.
+  await resolveShippingConflictIfPresent(page, log, shippingMethodForConflict);
 
   // 2nd attempt: JS-native click. Some React handlers respond to
   // el.click() when overlay/portal interception blocks Playwright's.
@@ -475,7 +559,30 @@ export async function continueToPayment(
   const thirdTransition = await hasPaymentSectionRendered(page, 4_000);
   if (thirdTransition) return finalizePaymentTransition(page, log);
 
-  // All three click strategies failed to transition. Dump validation
+  // 4th attempt: submit the enclosing <form> natively. React's `onSubmit`
+  // is bound to the form element, not the button. When the DOM `checked`
+  // attribute got set outside React's controlled-input contract (e.g.
+  // via our native setter dispatch), the button-onClick can silently
+  // no-op — but the form's onSubmit still fires validation + navigation
+  // against the current controlled state.
+  log('  · still no transition — trying form.requestSubmit()');
+  const formSubmitted = await btn
+    .evaluate((el: HTMLElement) => {
+      const form = el.closest('form') as HTMLFormElement | null;
+      if (!form) return false;
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+      return true;
+    })
+    .catch(() => false);
+  log(`  · form submit dispatched: ${formSubmitted}`);
+  const fourthTransition = await hasPaymentSectionRendered(page, 6_000);
+  if (fourthTransition) return finalizePaymentTransition(page, log);
+
+  // All four strategies failed to transition. Dump validation
   // errors (if any) and throw with a clear message so the trace shows
   // exactly why step 2 didn't advance. Tight selector list — avoids
   // matching page titles / SVG <title> elements / product-name blocks
@@ -503,7 +610,7 @@ export async function continueToPayment(
     .filter(isProbableError)
     .filter((s, i, arr) => arr.indexOf(s) === i)
     .slice(0, 8);
-  log(`  ! step 2 did not advance after 3 click strategies. Validation errors: ${visibleErrors.join(' | ') || '(none found)'}`);
+  log(`  ! step 2 did not advance after 4 click strategies. Validation errors: ${visibleErrors.join(' | ') || '(none found)'}`);
   throw new Error(
     `Continue to Payment click did not transition to step 3.` +
       (visibleErrors.length ? ` Validation errors: ${visibleErrors.join('; ')}` : ''),
@@ -513,10 +620,18 @@ export async function continueToPayment(
 async function hasPaymentSectionRendered(page: Page, timeoutMs: number): Promise<boolean> {
   return page
     .waitForFunction(
-      () =>
-        /credit(?:\s|\/)?(?:card|debit)|paypal|afterpay|google pay|apple pay|card number|cybersource/i.test(
-          document.body.innerText,
-        ),
+      () => {
+        const txt = document.body.innerText;
+        // Provider-name signals (fire when the CC/PP/AP/GP UI actually renders)
+        const providerVisible =
+          /credit(?:\s|\/)?(?:card|debit)|paypal|afterpay|google pay|apple pay|card number|cybersource/i.test(txt);
+        // Payment-step heading — fires earlier than the provider UI, so we
+        // don't spam retry clicks while a slow mobile-safari renders the
+        // step 3 body.
+        const paymentHeading =
+          /(payment method|choose your (preferred )?payment|how (would|do) you (like|want) to pay|select (a )?payment)/i.test(txt);
+        return providerVisible || paymentHeading;
+      },
       undefined,
       { timeout: timeoutMs, polling: 400 },
     )

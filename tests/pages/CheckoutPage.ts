@@ -125,7 +125,7 @@ export class CheckoutPage extends BasePage {
     await fillCncBillingContact(this.page, this.logMsg, buyer);
   }
 
-  async continueToPayment(): Promise<void> {
-    await continueToPayment(this.page, this.logMsg, this.overlayWaiter);
+  async continueToPayment(shippingMethodForConflict?: ShippingMethod): Promise<void> {
+    await continueToPayment(this.page, this.logMsg, this.overlayWaiter, shippingMethodForConflict);
   }
 }

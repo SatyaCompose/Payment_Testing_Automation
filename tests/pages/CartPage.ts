@@ -70,6 +70,20 @@ export class CartPage extends BasePage {
   }
 
   /**
+   * Cheap probe: navigate to /cart and report whether it already has any
+   * line items. Used by CheckoutFlow to skip re-adding products for
+   * logged-in retries — the server-side cart persists across attempts,
+   * so a retry that starts from scratch would double-stock the cart.
+   */
+  async probeHasItems(): Promise<boolean> {
+    await this.open();
+    await this.waitForLoadingOverlay();
+    const total = await getCartTotalAud(this.page).catch(() => 0);
+    this.log(`probeHasItems: /cart total = $${total.toFixed(2)}`);
+    return total > 0;
+  }
+
+  /**
    * Adds random products (via search) until cart total > minAud. Bails out
    * after `maxAttempts` picks to avoid infinite loops on cheap-only pools.
    */

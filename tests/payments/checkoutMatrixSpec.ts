@@ -24,6 +24,14 @@ export function registerCheckoutMatrixSpec(paymentMethod: PaymentMethod, section
   const payment = PAYMENT_METHODS[paymentMethod];
 
   test.describe(`${payment.shortLabel} · ${section.label}`, () => {
+    // Fan out 1.1 / 1.2 / 1.3 (and the equivalent triples in other
+    // sections) across workers when the dashboard's Parallel workers
+    // slider > 1. Each subtest uses a distinct identity (logged-in vs
+    // new-user vs guest-existing-email), so there's no cross-account
+    // contention. The worker-scoped sharedContext fixture in
+    // fixtures/index.ts gives each parallel test its own browser
+    // window + storageState, so no shared page state either.
+    test.describe.configure({ mode: 'parallel' });
     for (const user of USER_TYPES) {
       registerRow({ section, user, paymentMethod, paymentLabel: payment.longLabel, folderSlug: payment.folderSlug });
     }

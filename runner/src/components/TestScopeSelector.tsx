@@ -7,6 +7,12 @@ export interface TestScope {
   section: number;
   /** Empty string = all sub-tests in the section. Otherwise a "N.M" id. */
   subtest: string;
+  /**
+   * Free-form comma-separated list of "N.M" ids ("2.3, 3.1, 4.2"). When
+   * non-empty, overrides `section` + `subtest` and runs exactly the
+   * listed tests in one Playwright invocation.
+   */
+  subtestIds: string;
 }
 
 export interface PaymentMethodOption {
@@ -111,12 +117,34 @@ interface Props {
   onChange: (next: TestScope) => void;
 }
 
+/**
+ * Parse the free-form "specific ids" input into a normalised list.
+ * Accepts commas, whitespace, or both as separators. Silently drops
+ * tokens that don't match `N.M` — validation happens on the caller so
+ * the UI can show a hint.
+ */
+export function parseSubtestIds(raw: string): string[] {
+  return raw
+    .split(/[,\s]+/g)
+    .map((t) => t.trim())
+    .filter((t) => /^\d+\.\d+$/.test(t));
+}
+
 export function TestScopeSelector({ value, onChange }: Props) {
   const selectedSection = useMemo(
     () => SECTIONS.find((s) => s.id === value.section),
     [value.section],
   );
-  const subtestDisabled = !selectedSection;
+  const overrideActive = parseSubtestIds(value.subtestIds).length > 0;
+  const subtestDisabled = !selectedSection || overrideActive;
+  const sectionDisabled = overrideActive;
+
+  const parsedIds = useMemo(() => parseSubtestIds(value.subtestIds), [value.subtestIds]);
+  const rawTokens = value.subtestIds
+    .split(/[,\s]+/g)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const invalidTokens = rawTokens.filter((t) => !/^\d+\.\d+$/.test(t));
 
   const commonSelectClass =
     'rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-50';
@@ -142,6 +170,7 @@ export function TestScopeSelector({ value, onChange }: Props) {
         Section
         <select
           value={value.section}
+          disabled={sectionDisabled}
           onChange={(e) => {
             const next = Number(e.target.value);
             onChange({ ...value, section: next, subtest: '' });
@@ -175,6 +204,32 @@ export function TestScopeSelector({ value, onChange }: Props) {
           ))}
         </select>
       </label>
+
+      <label className="flex flex-col gap-1 text-xs text-slate-400">
+        <span>
+          Specific IDs
+          <span className="ml-1 text-slate-500">
+            (comma-separated — e.g. "2.3, 3.1, 4.2"). Overrides Section + Sub-test when set.
+          </span>
+        </span>
+        <input
+          type="text"
+          value={value.subtestIds}
+          onChange={(e) => onChange({ ...value, subtestIds: e.target.value })}
+          placeholder="2.3, 3.1, 4.2"
+          className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 focus:border-accent focus:outline-none"
+        />
+        {overrideActive && (
+          <span className="text-[11px] text-accent">
+            Will run: {parsedIds.join(', ')} ({parsedIds.length} test{parsedIds.length === 1 ? '' : 's'})
+          </span>
+        )}
+        {invalidTokens.length > 0 && (
+          <span className="text-[11px] text-warn">
+            Ignoring invalid: {invalidTokens.join(', ')} — expected format "N.M"
+          </span>
+        )}
+      </label>
     </div>
   );
 }
@@ -189,7 +244,16 @@ export function scopeToStartOptions(scope: TestScope): {
   paymentMethod?: string;
   section?: number;
   subtest?: string;
+  subtests?: string[];
 } {
+  const parsedIds = parseSubtestIds(scope.subtestIds);
+  if (parsedIds.length > 0) {
+    // Multi-id run — ignore section/subtest, hand the server the list.
+    return {
+      paymentMethod: scope.paymentMethod || undefined,
+      subtests: parsedIds,
+    };
+  }
   return {
     paymentMethod: scope.paymentMethod || undefined,
     section: scope.section || undefined,

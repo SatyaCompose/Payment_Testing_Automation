@@ -105,9 +105,22 @@ export async function readIframeLabels(page: Page, indices: number[]): Promise<I
  * Microform iframes have several helper inputs (1×1 tokens, form controls)
  * but only the real user-facing one has meaningful screen area.
  */
-export async function findRealInputInIframe(page: Page, idx: number): Promise<Locator | null> {
+export async function findRealInputInIframe(
+  page: Page,
+  idx: number,
+  timeoutMs = 15_000,
+): Promise<Locator | null> {
   const frame = page.frameLocator('iframe').nth(idx);
   const inputs = frame.locator('input:not([type="hidden"])');
+  // Cybersource attaches its iframe.html fast but the inner <input>
+  // mounts asynchronously — an instant .count() often returns 0 while
+  // the microform is still hydrating. Wait for the first input to
+  // attach before iterating; without this, callers see "iframe has no
+  // real input" on runs where the site just needed another 200-500 ms.
+  await inputs
+    .first()
+    .waitFor({ state: 'attached', timeout: timeoutMs })
+    .catch(() => undefined);
   const count = await inputs.count().catch(() => 0);
   let best: Locator | null = null;
   let bestWidth = 0;

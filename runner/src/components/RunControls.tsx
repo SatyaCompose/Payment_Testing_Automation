@@ -22,12 +22,13 @@ const PROJECTS = [
   { value: 'android-chrome', label: 'Android Chrome' },
 ];
 
-const INITIAL_SCOPE: TestScope = { paymentMethod: '', section: 0, subtest: '' };
+const INITIAL_SCOPE: TestScope = { paymentMethod: '', section: 0, subtest: '', subtestIds: '' };
 
 export function RunControls({ status, auth, paused, onStart, onStop, onPause, onResume, compact }: Props) {
   const [headed, setHeaded] = useState(true);
   const [recordVideo, setRecordVideo] = useState(false);
   const [slowMoMs, setSlowMoMs] = useState(0);
+  const [workers, setWorkers] = useState<number>(1);
   const [project, setProject] = useState<string>(PROJECTS[0].value);
   const [scope, setScope] = useState<TestScope>(INITIAL_SCOPE);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -129,6 +130,26 @@ export function RunControls({ status, auth, paused, onStart, onStop, onPause, on
       </label>
 
       <label className="flex flex-col gap-1 text-xs text-slate-400">
+        <span>
+          Parallel workers: <b className="text-slate-200">{workers}</b>
+          {workers > 1 && (
+            <span className="ml-2 text-warn">
+              (logged-in tests share the same test user — parallel runs can race)
+            </span>
+          )}
+        </span>
+        <input
+          type="range"
+          min={1}
+          max={6}
+          step={1}
+          value={workers}
+          onChange={(e) => setWorkers(Number(e.target.value))}
+          className="accent-accent"
+        />
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs text-slate-400">
         Browser project
         <select
           value={project}
@@ -152,6 +173,7 @@ export function RunControls({ status, auth, paused, onStart, onStop, onPause, on
             headed,
             recordVideo,
             slowMoMs,
+            workers,
             project: project || undefined,
             ...scopeToStartOptions(scope),
           })

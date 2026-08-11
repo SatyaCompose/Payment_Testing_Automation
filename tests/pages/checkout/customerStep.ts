@@ -98,9 +98,13 @@ export async function continueToShipping(page: Page, log: Logger): Promise<void>
     .filter({ hasText: /^\s*continue\s*$/i })
     .first();
 
-  // Short wait — the Continue button is normally already present.
+  // Wait up to 15s for the preferred "Continue to shipping" button.
+  // Mobile-safari can take 8-12s to hydrate the button after the
+  // customer step renders, and the fallback "Continue" locator often
+  // matches nothing (or matches a stale button from step 2/3 collapsed
+  // headers), which then wastes the full 20s click timeout.
   const preferredVisible = await preferred
-    .waitFor({ state: 'visible', timeout: 5_000 })
+    .waitFor({ state: 'visible', timeout: 15_000 })
     .then(() => true)
     .catch(() => false);
   const continueBtn = preferredVisible ? preferred : fallback;
@@ -122,9 +126,13 @@ export async function continueToShipping(page: Page, log: Logger): Promise<void>
     );
   }
 
-  // Post-click: wait for anything that indicates step 2 is up.
+  // Post-click: wait for anything that indicates step 2 is up. Include
+  // the shipping-conflict modal's action labels — that modal renders ON
+  // step 2 and can cover the usual "search for an address / billing /
+  // shipping method" text, so its presence is itself proof step 2
+  // loaded. selectShippingMethod resolves the modal downstream.
   const shippingReady = page
-    .getByText(/search for an address|billing address|shipping method|delivery method/i)
+    .getByText(/search for an address|billing address|shipping method|delivery method|ship all items instead|select another store|remove low stock items/i)
     .or(page.getByLabel(/first name|given name|forename/i))
     .or(page.getByLabel(/^address\*?$|street address|address line/i))
     .or(page.getByLabel(/postcode|postal code|zip/i))

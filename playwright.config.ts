@@ -5,7 +5,10 @@ import * as path from 'path';
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const STAGING_URL = process.env.STAGING_URL ?? 'https://staging.example.com';
-const IS_CI = !!process.env.CI;
+// Explicit truth check — `CI=false` in .env used to satisfy `!!process.env.CI`
+// (any non-empty string is truthy), which silently kept `retries: 2` on
+// every local run and inflated wall time 3x on flakes.
+const IS_CI = /^(1|true|yes)$/i.test(process.env.CI ?? '');
 
 // Local parallelism — one browser window per worker. Bumping workers
 // runs multiple spec files simultaneously (different files can run in

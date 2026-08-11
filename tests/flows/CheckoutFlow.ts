@@ -177,7 +177,7 @@ export class CheckoutFlow {
       await this.checkout.fillCncBillingContact(buyer);
       await this.checkout.pickCncBillingAddress(config.region);
       await selectCncStoreWithProductRetry(this, config, buyer);
-      await this.checkout.continueToPayment();
+      await this.checkout.continueToPayment('cnc');
       return;
     }
 
@@ -191,7 +191,7 @@ export class CheckoutFlow {
       await this.checkout.ensureBillingSameAsShipping();
     }
     await this.checkout.selectShippingMethod(config.shipping);
-    await this.checkout.continueToPayment();
+    await this.checkout.continueToPayment(config.shipping);
   }
 
   /**
@@ -221,7 +221,22 @@ export class CheckoutFlow {
     buyer?: BuyerDetails & { password?: string },
   ): Promise<BuyerDetails & { password?: string }> {
     await this.signOutIfGuestFlow(config.userType);
-    await this.addProductsToCart(config);
+    // Logged-in accounts have a server-side cart that persists across
+    // test retries. Probe first — if items already exist (retry attempt,
+    // or a previous run of this spec that failed mid-checkout), skip
+    // re-adding products and let openCheckout proceed from /cart.
+    // Guest / new-user flows always start with a fresh browser context,
+    // so their cart is empty by definition.
+    let skipAdd = false;
+    if (config.userType === 'logged-in') {
+      skipAdd = await this.cart.probeHasItems().catch(() => false);
+      if (skipAdd) {
+        console.log('[CheckoutFlow] logged-in cart already has items — skipping product add, proceeding via /cart');
+      }
+    }
+    if (!skipAdd) {
+      await this.addProductsToCart(config);
+    }
     await this.openCheckout();
     const buyerToUse = buyer ?? this.buyerFor(config);
     const { hasSavedAddress } = await this.customerStep(config, buyerToUse);

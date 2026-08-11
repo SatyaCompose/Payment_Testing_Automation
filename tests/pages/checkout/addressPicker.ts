@@ -129,7 +129,13 @@ export async function pickAddress(page: Page, log: Logger, region: ShippingRegio
   const suffix = countryCode[region];
   log(`step 2 · pickAddress country=${country} (expect ", ${suffix}" suffix)`);
 
-  if (await hasSavedAddressForRegion(page, log, region)) {
+  // Logged-in profiles are AU-based; a stale AU street/postcode lingers
+  // in the manual fields even after the country selector flips to NZ/SG.
+  // Reusing the saved address early-exit leaves that stale data in the
+  // form and fails validation on Continue → payment. For international,
+  // always run the full autocomplete search so the picked suggestion
+  // overwrites the AU values.
+  if (region === 'AU' && (await hasSavedAddressForRegion(page, log, region))) {
     return `(reused saved ${suffix} address)`;
   }
 
@@ -190,7 +196,12 @@ export async function pickAddress(page: Page, log: Logger, region: ShippingRegio
     return true;
   };
 
-  if (!state.autocompleteVisible || state.anyManualFilled) {
+  // For international, force-open the search toggle regardless of the
+  // form state — logged-in AU prefill can look "autocomplete ready"
+  // (the KWH input is the same DOM node) but typing straight in would
+  // overwrite the visible Address field, not drive the autocomplete.
+  const forceSearch = region !== 'AU';
+  if (forceSearch || !state.autocompleteVisible || state.anyManualFilled) {
     await openSearchToggle();
   }
 

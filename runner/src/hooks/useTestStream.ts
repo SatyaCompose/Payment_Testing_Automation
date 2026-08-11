@@ -13,8 +13,15 @@ export interface StartOptions {
   section?: number;
   /** Sub-test id like "1.2" or "6.1". */
   subtest?: string;
+  /**
+   * Free-form list of "N.M" ids to run together in one Playwright run
+   * (e.g. ["2.3", "3.1", "4.2"]). Overrides `section` + `subtest`.
+   */
+  subtests?: string[];
   /** Record every test as WebM video (overrides retain-on-failure default). */
   recordVideo?: boolean;
+  /** Concurrent Playwright workers. Undefined → server default (3 locally). */
+  workers?: number;
 }
 
 export interface UseTestStream {

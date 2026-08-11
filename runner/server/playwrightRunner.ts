@@ -101,15 +101,19 @@ export class PlaywrightRunner {
     if (opts.slowMoMs && opts.slowMoMs > 0) {
       env.RUN_SLOW_MO_MS = String(opts.slowMoMs);
     }
-    // When the user explicitly targeted a single sub-test in the UI,
-    // bypass the "screenshot already exists → auto-skip" guard in
+    // When the user explicitly targeted specific sub-tests in the UI
+    // (either a single one or a comma-separated list), bypass the
+    // "screenshot already exists → auto-skip" guard in
     // tests/fixtures/index.ts. Explicit selection means they want to
-    // re-run it regardless of a leftover screenshot on disk.
-    if (opts.subtest) {
+    // re-run those tests regardless of leftover screenshots on disk.
+    if (opts.subtest || (opts.subtests && opts.subtests.length > 0)) {
       env.FORCE_RERUN = '1';
     }
     if (opts.recordVideo) {
       env.RECORD_VIDEO = '1';
+    }
+    if (opts.workers && Number.isFinite(opts.workers) && opts.workers > 0) {
+      env.PW_WORKERS = String(Math.floor(opts.workers));
     }
 
     // spawnCli runs the local Playwright CLI through node — see procUtils

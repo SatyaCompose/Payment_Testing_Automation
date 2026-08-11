@@ -270,8 +270,13 @@ export async function handleLoginPromptIfPresent(
 
   // KWH's OAuth callback lands with ?code=… in the URL. The page needs
   // a moment to exchange the code + hydrate the checkout form before
-  // any input is interactive.
+  // any input is interactive. On mobile-safari the redirect chain can
+  // take a beat longer than networkidle — explicitly wait for the URL
+  // to reach the KWH domain before declaring "signed in".
   await page.waitForLoadState('domcontentloaded').catch(() => undefined);
+  await page
+    .waitForURL(/staging\.kitchenwarehouse\.com\.au\/checkout/i, { timeout: 30_000 })
+    .catch(() => log('  ! did not land on KWH /checkout within 30s — will still probe'));
   await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
   await waitForOverlay();
   log(`  → checkout ready. url=${page.url().slice(0, 100)}`);

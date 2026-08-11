@@ -7,8 +7,15 @@ export interface StartOptions {
   paymentMethod?: string;
   section?: number;
   subtest?: string;
+  /**
+   * Free-form list of "N.M" ids to run together (e.g. ["2.3", "3.1", "4.2"]).
+   * When present, overrides `section` + `subtest` and grep matches any of them.
+   */
+  subtests?: string[];
   /** Record every test as WebM video (overrides retain-on-failure default). */
   recordVideo?: boolean;
+  /** Playwright worker count. Undefined → let the config default fire. */
+  workers?: number;
 }
 
 const PAYMENT_METHOD_SLUGS = new Set([
@@ -32,6 +39,13 @@ export function buildScopeArgs(opts: StartOptions): { positional: string[]; grep
   const positional: string[] = [];
   if (opts.paymentMethod && PAYMENT_METHOD_SLUGS.has(opts.paymentMethod)) {
     positional.push(`tests/payments/${opts.paymentMethod}`);
+  }
+  // Multi-id run — build a single alternation grep, e.g. `\b(2\.3|3\.1|4\.2)\b`.
+  // Highest priority: overrides section + subtest.
+  const validIds = (opts.subtests ?? []).filter((s) => /^\d+\.\d+$/.test(s));
+  if (validIds.length > 0) {
+    const alt = validIds.map((s) => s.replace('.', '\\.')).join('|');
+    return { positional, grep: `\\b(${alt})\\b` };
   }
   if (opts.subtest && /^\d\.\d$/.test(opts.subtest)) {
     const [maj, min] = opts.subtest.split('.');
