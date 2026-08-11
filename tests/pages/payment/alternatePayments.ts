@@ -248,23 +248,45 @@ export async function payWithPayPal(page: Page, email: string, password: string)
   console.log(`[PayPal] ✓ popup opened: ${popup.url()}`);
   await popup.waitForLoadState('domcontentloaded').catch(() => undefined);
   console.log('[PayPal] popup DOM loaded — filling email');
-  // `getByLabel(/email/i)` matches the "Login with email one-time
-  // code" link + OTP chevron button — scope to the actual textbox.
-  await popup.getByRole('textbox', { name: /email or mobile/i }).fill(email);
+  // PayPal renames the login-form label across skins ("Email or
+  // mobile", "Email address", plain "Email"). Match any of them by
+  // role name OR fall back to id/type/name attributes so a rename
+  // doesn't break the run.
+  const emailBox = popup
+    .getByRole('textbox', { name: /email(?:\s*(?:or\s*mobile|address))?/i })
+    .or(popup.locator('input#email, input[type="email"], input[name="login_email"]'))
+    .first();
+  await emailBox.waitFor({ state: 'visible', timeout: 30_000 });
+  await emailBox.fill(email);
   console.log('[PayPal] email filled — clicking Next');
-  await popup.getByRole('button', { name: /^next$/i }).click();
+  // "Next" is sometimes labelled "Continue" on the first step of newer
+  // skins; accept both.
+  await popup
+    .getByRole('button', { name: /^\s*(next|continue)\s*$/i })
+    .or(popup.locator('button#btnNext, [data-testid="submit-btn"]'))
+    .first()
+    .click();
   console.log('[PayPal] Next clicked — filling password');
-  // Same rationale — use the password textbox specifically. Some
-  // PayPal skins render it as an input, others as a passwordbox
-  // role; match either.
   const passwordBox = popup
     .getByRole('textbox', { name: /^password$/i })
-    .or(popup.locator('input#password'));
+    .or(popup.getByLabel(/^password$/i))
+    .or(popup.locator('input#password, input[type="password"], input[name="login_password"]'))
+    .first();
+  await passwordBox.waitFor({ state: 'visible', timeout: 30_000 });
   await passwordBox.fill(password);
   console.log('[PayPal] password filled — clicking Log In');
-  await popup.getByRole('button', { name: /log ?in/i }).click();
+  await popup
+    .getByRole('button', { name: /log ?in|sign ?in/i })
+    .or(popup.locator('button#btnLogin, [data-testid="submit-btn"]'))
+    .first()
+    .click();
   console.log('[PayPal] logged in — clicking Pay Now / Complete Purchase');
-  await popup.getByRole('button', { name: /pay now|complete purchase|continue/i }).click();
+  await popup
+    .getByRole('button', {
+      name: /pay now|complete purchase|continue|complete payment|agree (?:&|and) continue/i,
+    })
+    .first()
+    .click();
   console.log('[PayPal] Pay Now clicked — waiting for popup to close');
   await popup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
   console.log('[PayPal] popup closed — outer flow will assert confirmation');

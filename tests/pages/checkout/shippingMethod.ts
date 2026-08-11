@@ -162,7 +162,7 @@ export async function selectShippingMethod(
     }
 
     if (nowChecked) {
-      const verdict = await verifyShippingSelection(page, target, others);
+      const verdict = await verifyShippingSelection(page, target, others, targetAliases);
       if (verdict.ok) {
         log(`  ✓ ${method} shipping selected via KWH label`);
         return;
