@@ -38,15 +38,24 @@ export async function selectShippingMethod(
   // instead" so the shipping method cards below render normally.
   await resolveShippingConflictIfPresent(page, log, method);
 
-  // Wait for the shipping section to render at least ONE recognisable
-  // card. Previously required both "Standard shipping" AND (Express OR
-  // CNC) which timed out on international destinations that only offer
-  // a single option under a per-country label ("New Zealand delivery",
-  // etc.). Now we wait for any known alias, keyed off the current
-  // target so the wait is meaningful for the case being tested.
+  // Wait for the shipping section to be FULLY stable, not just text-
+  // rendered. Two signals must both hold:
+  //   1. The target label (or a known alias) is on the page.
+  //   2. At least one shipping-method label wraps a :checked input —
+  //      i.e. KWH's rate fetch completed and its default selection
+  //      landed. Without #2 the click race can fire against a section
+  //      that's still mid re-render after the address change, and the
+  //      verifier then reports "no label wraps a :checked input" while
+  //      the site was simply not ready.
+  // Also wait for any KWH "shipping loading" overlay to disappear.
   const targetAliasList = shippingMethodAliases[method]
     .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');
+  const allAliasesList = (Object.values(shippingMethodAliases) as string[][])
+    .flat()
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  // First: soft wait for the target label to appear at all.
   await page
     .waitForFunction(
       (aliasPattern: string) => new RegExp(aliasPattern, 'i').test(document.body.innerText),
@@ -56,6 +65,26 @@ export async function selectShippingMethod(
     .catch(() => {
       log(`  ! shipping section did not render "${target}" (or an alias) in 25s — will still try`);
     });
+  // Then: hard wait for a checked default among any shipping label —
+  // that's the "rates fetched + default picked" signal. If it never
+  // comes true within 15s, log and continue (some KWH revisions may
+  // ship without a pre-checked default; downstream will still try).
+  await page
+    .waitForFunction(
+      (allAliases: string) => {
+        const methodRe = new RegExp(allAliases, 'i');
+        const labels = Array.from(document.querySelectorAll('label')) as HTMLLabelElement[];
+        return labels.some(
+          (l) =>
+            methodRe.test(l.textContent || '') &&
+            !!l.querySelector('input[type="checkbox"]:checked, input[type="radio"]:checked'),
+        );
+      },
+      allAliasesList,
+      { timeout: 15_000, polling: 400 },
+    )
+    .then(() => log('  · shipping section is stable — a default option is checked'))
+    .catch(() => log('  ! no shipping card reports :checked within 15s — proceeding anyway (may indicate mid-render)'));
 
   // Special case: only ONE shipping method is offered (typical for
   // international destinations — the international card is often the
