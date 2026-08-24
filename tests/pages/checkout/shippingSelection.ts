@@ -145,9 +145,39 @@ export async function verifyShippingSelection(
       );
       const labels = Array.from(document.querySelectorAll('label')) as HTMLLabelElement[];
       const shippingLabels = labels.filter((l) => methodRe.test(l.textContent || ''));
-      const checkedLabels = shippingLabels.filter(
-        (l) => !!l.querySelector('input[type="checkbox"]:checked, input[type="radio"]:checked'),
-      );
+      const checkedNames = shippingLabels
+        .filter((l) => !!l.querySelector('input[type="checkbox"]:checked, input[type="radio"]:checked'))
+        .map((l) => (l.textContent || '').trim());
+
+      // Not every revision wraps the input in a <label>: some render a bare
+      // checkbox named by aria-label or label[for]. Reading only wrapped
+      // labels reported "(none)" on those pages even with a method checked.
+      if (checkedNames.length === 0) {
+        const inputs = Array.from(
+          document.querySelectorAll('input[type="checkbox"]:checked, input[type="radio"]:checked'),
+        ) as HTMLInputElement[];
+        for (const input of inputs) {
+          let name = input.getAttribute('aria-label') || '';
+          if (!name && input.id) {
+            const forLabel = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+            name = forLabel?.textContent || '';
+          }
+          if (!name) {
+            // Nearest small ancestor naming a shipping method.
+            let node: HTMLElement | null = input.parentElement;
+            for (let hops = 0; node && hops < 5; hops += 1, node = node.parentElement) {
+              const t = node.textContent || '';
+              if (methodRe.test(t) && t.length < 200) {
+                name = t;
+                break;
+              }
+            }
+          }
+          if (methodRe.test(name)) checkedNames.push(name.trim());
+        }
+      }
+
+      const checkedLabels = checkedNames;
       // Desync guard: KWH treats shipping options as a radio group, so
       // exactly one label may be :checked. If two are checked at once,
       // the second one was set by a synthetic dispatch that bypassed
@@ -155,7 +185,7 @@ export async function verifyShippingSelection(
       // still whatever KWH thought was selected first. Fail loudly.
       if (checkedLabels.length > 1) {
         const names = checkedLabels
-          .map((l) => (l.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40))
+          .map((l) => l.replace(/\s+/g, ' ').slice(0, 40))
           .join(' | ');
         return {
           ok: false,
@@ -168,10 +198,10 @@ export async function verifyShippingSelection(
         return {
           ok: false,
           selectedText: '(none)',
-          reason: 'no shipping-method label wraps a :checked input',
+          reason: 'no shipping-method control reports :checked (label-wrapped or named)',
         };
       }
-      const text = (selected.textContent || '').trim();
+      const text = selected.trim();
       const lowerText = text.toLowerCase();
       const hasTarget = targetAliases.some((a) => lowerText.includes(a.toLowerCase()));
       const hasOther = otherLabels.some((o) => lowerText.includes(o.toLowerCase()));

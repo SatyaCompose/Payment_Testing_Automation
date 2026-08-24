@@ -139,12 +139,49 @@ export async function selectShippingMethod(
     log(`  · radio still not checked — falling through to card-click path`);
   }
 
+  const escapedOthers = others.map(escapeRegex);
+  const notOtherRe = new RegExp(escapedOthers.join('|'), 'i');
+
+  // Strategy 1.4: some revisions render the shipping options as bare
+  // checkboxes named by aria-label / label[for], with no wrapping <label>.
+  // The label strategy below finds nothing there, so the card-click path took
+  // over and clicked a container that isn't bound to the input — Express never
+  // toggled and the run failed as `currently selected card is "(none)"`.
+  // Address it by role, and use check() which is idempotent on a hidden input.
+  const roleControl = page
+    .getByRole('checkbox', { name: targetRe })
+    .or(page.getByRole('radio', { name: targetRe }))
+    .first();
+  if (await roleControl.count().catch(() => 0)) {
+    if (await roleControl.isChecked().catch(() => false)) {
+      log(`  ✓ ${method} already checked (accessible-name match) — no click needed`);
+      return;
+    }
+    log(`  → checking "${target}" control found by accessible name`);
+    for (const strat of [
+      { name: 'check()', fn: () => roleControl.check({ force: true, timeout: 5_000 }) },
+      { name: 'click()', fn: () => roleControl.click({ force: true, timeout: 5_000 }) },
+      { name: 'evaluate.click', fn: () => roleControl.evaluate((el: HTMLElement) => el.click()) },
+    ]) {
+      await strat.fn().catch((err) => log(`  · ${strat.name} threw: ${(err as Error).message?.split('\n')[0]}`));
+      if (await roleControl.isChecked().catch(() => false)) {
+        log(`  · toggled via "${strat.name}"`);
+        const verdict = await verifyShippingSelection(page, target, others, targetAliases);
+        if (verdict.ok) {
+          log(`  ✓ ${method} shipping selected via accessible name`);
+          return;
+        }
+        log(`  · input checked but verdict not ok (${verdict.reason}) — falling through`);
+        break;
+      }
+      log(`  · "${strat.name}" did not toggle input — trying next`);
+    }
+  }
+
   // Strategy 1.5 (KWH-specific): shipping cards are <label> wrappers
   // around <input type="checkbox" class="sr-only">. Clicking any wrapper
   // <div>/<span> around the label does nothing — only the label itself is
   // bound to the input. Prefer the label directly.
-  const escapedOthers = others.map(escapeRegex);
-  const notOtherRe = new RegExp(escapedOthers.join('|'), 'i');
 
   const kwhLabel = page
     .locator('label')
@@ -411,12 +448,48 @@ async function resolveShippingConflictIfPresent(
   // "Apply changes", "Confirm selection"). Match any short button text
   // containing one of the commit verbs, prioritising modal-scoped
   // buttons over the page-level Continue.
+  // KWH commits the conflict banner with an explicit action label — observed
+  // as "Remove out of stock items" — which no generic commit verb matches. The
+  // verb-only list used to fall through to the order summary's promo-code
+  // "Apply" (earlier in the DOM, so `.first()` won it); applying an empty promo
+  // re-rendered the step without a Continue button. So: match the real action
+  // labels first, then generic verbs, and never a bare "Apply" ("Apply
+  // changes" is still fine).
+  const conflictActionRe =
+    /remove (out of stock|unavailable|low stock) items|ship all items instead|click and collect all items instead/i;
   const confirmVerbRe = /(continue|confirm|save|apply|update|ok|proceed)/i;
-  const confirmBtn = page
-    .locator('button:visible, [role="button"]:visible, input[type="submit"]:visible')
-    .filter({ hasText: confirmVerbRe })
-    .filter({ hasNotText: /back to cart|log ?out|show|hide|view (my )?cart/i })
-    .first();
+  const notCommitRe = /back to cart|log ?out|show|hide|view (my )?cart/i;
+  const bareApplyRe = /^\s*apply\s*$/i;
+  const clickable = 'button:visible, [role="button"]:visible, input[type="submit"]:visible';
+  const modalScope = page.locator('[role="dialog"], [role="alertdialog"], [aria-modal="true"]');
+  const candidates = [
+    { label: 'modal action', locator: modalScope.locator(clickable).filter({ hasText: conflictActionRe }) },
+    { label: 'page action', locator: page.locator(clickable).filter({ hasText: conflictActionRe }) },
+    {
+      label: 'modal verb',
+      locator: modalScope
+        .locator(clickable)
+        .filter({ hasText: confirmVerbRe })
+        .filter({ hasNotText: notCommitRe })
+        .filter({ hasNotText: bareApplyRe }),
+    },
+    {
+      label: 'page verb',
+      locator: page
+        .locator(clickable)
+        .filter({ hasText: confirmVerbRe })
+        .filter({ hasNotText: notCommitRe })
+        .filter({ hasNotText: bareApplyRe }),
+    },
+  ];
+  let confirmBtn = candidates[candidates.length - 1].locator.first();
+  for (const candidate of candidates) {
+    if (await candidate.locator.count().catch(() => 0)) {
+      log(`  · commit control matched via ${candidate.label}`);
+      confirmBtn = candidate.locator.first();
+      break;
+    }
+  }
   if (await confirmBtn.count().catch(() => 0)) {
     const confirmLabel = ((await confirmBtn.textContent().catch(() => null)) ?? '').trim().slice(0, 60);
     log(`  · clicking confirm-like button "${confirmLabel}"`);

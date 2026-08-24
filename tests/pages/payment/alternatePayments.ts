@@ -1,4 +1,5 @@
 import { Page } from '@playwright/test';
+import { clearGpayOverlayIfIntercepting } from './overlay';
 
 // ---------- PayPal (new tab / popup) ----------
 /**
@@ -369,6 +370,9 @@ export async function payWithAfterpay(page: Page, email: string, password: strin
     await clickAndWait('branded Afterpay button', () => branded.click({ timeout: 10_000 }));
   } else {
     console.log('[Afterpay] no branded button — falling back to Place Order (force click)');
+    // Google's button overlays Place order at the same rect on every payment
+    // method, so clear it first or the click lands on Google's element.
+    await clearGpayOverlayIfIntercepting(page, (m) => console.log(`[Afterpay]${m}`));
     await clickAndWait('Place Order (force)', () =>
       page.locator('[data-testid="place-order-btn"]').first().click({ force: true, timeout: 10_000 }),
     );
@@ -556,6 +560,50 @@ export async function payWithGooglePay(page: Page): Promise<void> {
     .filter({ visible: true })
     .first();
   await gpayButton.waitFor({ state: 'visible', timeout: 15_000 });
+
+  // Google's button and KWH's "Place order" occupy the same rect, and which
+  // one is on top depends on how far the app has got wiring GPay up. The
+  // button being "visible, enabled and stable" is not enough: clicking too
+  // early fails with `place-order-btn subtree intercepts pointer events`, and
+  // in the other direction Place order is the one that ends up blocked. So
+  // hit-test the centre until Google's element is the one that would receive
+  // the click. force:true cannot substitute — the real mouse event still lands
+  // on whatever is topmost, and PaymentRequest needs the gesture on Google's
+  // element.
+  const topAtCentre = async (): Promise<string> =>
+    page
+      .evaluate(() => {
+        const el = document.querySelector('.gpay-button.buy');
+        if (!el) return 'no-gpay-button';
+        const r = el.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!top) return 'nothing-at-point';
+        return `${top.tagName.toLowerCase()}.${(top.getAttribute('class') || '').slice(0, 60)}`;
+      })
+      .catch(() => 'evaluate-failed');
+
+  let top = await topAtCentre();
+  for (let i = 0; i < 30 && !/gpay-button/.test(top); i += 1) {
+    if (i === 0) console.log(`[GPay] centre currently intercepted by ${top} — waiting for Google's button to come to front`);
+    await page.waitForTimeout(500).catch(() => undefined);
+    top = await topAtCentre();
+  }
+
+  if (!/gpay-button/.test(top)) {
+    // Still blocked after 15s: neutralise the overlay so the gesture reaches
+    // Google's handler. Pointer-events only — the button is not removed, and
+    // the app sets this itself once GPay finishes wiring.
+    console.log(`[GPay] still intercepted by ${top} — disabling pointer events on place-order-btn`);
+    await page
+      .evaluate(() => {
+        const po = document.querySelector('[data-testid="place-order-btn"]') as HTMLElement | null;
+        if (po) po.style.pointerEvents = 'none';
+      })
+      .catch(() => undefined);
+    top = await topAtCentre();
+  }
+
+  console.log(`[GPay] element at click point: ${top}`);
   console.log('[GPay] clicking .gpay-button.buy — waiting for MANUAL Pay click in popup (up to 3 min)');
   await gpayButton.click();
 

@@ -117,22 +117,53 @@ export class CartPage extends BasePage {
   async clearCart(): Promise<void> {
     await this.open();
     this.log('clearing every item from the cart');
-    for (let safety = 0; safety < 20; safety++) {
-      const removeBtn = this.page
-        .getByRole('button', { name: /^remove$|remove item|delete/i })
-        .or(this.page.locator('button, [role="button"]').filter({ hasText: /^\s*remove\s*$/i }))
-        .first();
-      if (!(await removeBtn.isVisible({ timeout: 1_500 }).catch(() => false))) break;
-      await removeBtn.scrollIntoViewIfNeeded().catch(() => undefined);
-      await removeBtn.click({ force: true }).catch(() => undefined);
-      // Confirmation dialog / undo — accept if present.
+
+    const removeBtns = this.page
+      .getByRole('button', { name: /^remove$|remove item|delete/i })
+      .or(this.page.locator('button, [role="button"]').filter({ hasText: /^\s*remove\s*$/i }));
+    const emptyMarker = this.page
+      .getByText(/your cart is empty|cart is empty|no items in your cart/i)
+      .first();
+
+    // KWH hydrates cart line items from an API well after load — measured at
+    // ~6s on staging. The old 1.5s probe ran before any Remove button existed,
+    // so the loop broke on the first miss and logged success on a full cart.
+    // Every CNC retry then piled more products onto the same cart, until no
+    // store had all of them in stock.
+    await Promise.race([
+      removeBtns.first().waitFor({ state: 'visible', timeout: 15_000 }),
+      emptyMarker.waitFor({ state: 'visible', timeout: 15_000 }),
+    ]).catch(() => undefined);
+
+    for (let safety = 0; safety < 25; safety++) {
+      const before = await removeBtns.count().catch(() => 0);
+      if (before === 0) break;
+      const btn = removeBtns.first();
+      await btn.scrollIntoViewIfNeeded().catch(() => undefined);
+      await btn.click({ force: true }).catch(() => undefined);
+
+      // Confirmation dialog — scoped to a dialog so the pattern cannot match
+      // another line item's own Remove button and delete two at once.
       const confirm = this.page
+        .locator('[role="dialog"], [role="alertdialog"]')
         .getByRole('button', { name: /confirm|yes|remove|ok/i })
         .first();
       if (await confirm.isVisible({ timeout: 800 }).catch(() => false)) {
         await confirm.click({ force: true }).catch(() => undefined);
       }
-      await this.page.waitForTimeout(400);
+
+      // Wait for the list to actually shrink rather than sleeping a fixed
+      // 400ms — the last Remove button detaches when an item leaves.
+      await removeBtns
+        .nth(before - 1)
+        .waitFor({ state: 'detached', timeout: 8_000 })
+        .catch(() => undefined);
+      this.log(`  · removed 1 item (${before - 1} left)`);
+    }
+
+    const left = await removeBtns.count().catch(() => 0);
+    if (left > 0) {
+      throw new Error(`clearCart: ${left} item(s) still in the cart after 25 removal attempts`);
     }
     this.log('  ✓ cart cleared');
   }

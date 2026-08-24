@@ -9,6 +9,13 @@ const IN_STOCK_RE = /\bin\s*stock\b/i;
 const MODE_LABEL_RE =
   /^\s*(ship|standard( shipping)?|express( shipping)?|click\s*(&|and)\s*collect)(\s*(free|\$[\d.]+))?\s*$/i;
 const AU_ADDRESS_RE = /\b(?:ACT|NSW|VIC|QLD|SA|WA|TAS|NT)[, ]+\d{4}\b/;
+/**
+ * A real store card carries a stock status or trading-hours badge. The
+ * shipping/billing address block also contains exactly one AU address and was
+ * being picked as a "store card", after which the checkout refused to advance
+ * because no pickup store had actually been chosen.
+ */
+const STORE_CARD_SIGNAL_RE = /\bin\s*stock\b|\b(open|closed)\b|\bkm\b|pick ?up/i;
 
 /**
  * Fast path for the main-page CNC layout: KWH lists the 3 nearest stores
@@ -42,6 +49,14 @@ export async function pickFromMainPageStoreCards(page: Page, log: Logger): Promi
     if (addressMatches.length !== 1) continue;
     const firstLine = text.split('\n').map((s) => s.trim()).filter(Boolean)[0] ?? '';
     if (MODE_LABEL_RE.test(firstLine)) continue;
+    if (!STORE_CARD_SIGNAL_RE.test(text)) continue;
+    if (NOT_IN_STOCK_RE.test(text)) continue;
+    // Form fields mean this is the address block, not a store card.
+    const formFields = await card
+      .locator('input:not([type="radio"]):not([type="checkbox"]), textarea, select')
+      .count()
+      .catch(() => 0);
+    if (formFields > 0) continue;
     if (seen.has(firstLine)) continue;
     seen.add(firstLine);
     // No IN_STOCK filter here — the heading guarantees all three cards
@@ -68,13 +83,66 @@ export async function pickInStockStoreInDrawer(page: Page, log: Logger): Promise
   // before scanning — otherwise every card looks "no-in-stock-signal".
   await waitForStockSignalsToLoad(page, log);
 
-  // Direct DOM scan: find the smallest ancestor of each "In stock" text
-  // node that contains a single AU state+postcode address. That ancestor
-  // is the store card. Tags a `data-cnc-target` attribute on candidates
-  // so Playwright can then click them by locator. Playwright's own
-  // filter({hasText, has}) sometimes misses cross-subtree layouts KWH
-  // uses (e.g. status badge rendered as a sibling of the address block).
-  const picks = await page.evaluate(() => {
+  // The drawer re-renders continuously while per-store inventory streams in,
+  // so a data-cnc-target tag written by one evaluate is usually gone by the
+  // time Playwright clicks it — the locator resolves to nothing and the click
+  // burns its timeout. Scan and click inside the SAME evaluate, where no
+  // re-render can intervene; only fall back to a Playwright click if that
+  // never registers with the app.
+  const inPage = await scanAndTagInStockStores(page, true);
+  if (inPage.length === 0) return null;
+  log(`  · in-stock store candidate(s) found: ${inPage.length}`);
+  log(`  · candidates: ${inPage.map((p) => `"${p.heading}"`).slice(0, 6).join(' | ')}`);
+
+  if (inPage[0].clicked && (await selectionRegistered(page))) {
+    log(`  ✓ selected in-stock store "${inPage[0].heading}" (in-page click)`);
+    return inPage[0].heading;
+  }
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const picks = await scanAndTagInStockStores(page, false);
+    if (picks.length === 0) return null;
+    const target = page.locator(`[data-cnc-target="${picks[0].targetIdx}"]`).first();
+    await target.scrollIntoViewIfNeeded().catch(() => undefined);
+    log(`  → clicking in-stock store "${picks[0].heading}" (Playwright attempt ${attempt}/2)`);
+    const clicked = await target
+      .click({ force: true, timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (clicked) return picks[0].heading;
+    log('  · tag went stale before the click (drawer re-rendered) — rescanning');
+  }
+
+  return null;
+}
+
+/**
+ * A store card click is only real if the drawer's "Confirm pickup store" action
+ * becomes available — an in-page click that the app ignored leaves it disabled.
+ */
+async function selectionRegistered(page: Page): Promise<boolean> {
+  const confirm = page
+    .getByRole('button', { name: /confirm pickup store|confirm store|confirm/i })
+    .first();
+  if (!(await confirm.isVisible({ timeout: 3_000 }).catch(() => false))) return false;
+  return confirm.isEnabled().catch(() => false);
+}
+
+interface StorePick {
+  heading: string;
+  targetIdx: number;
+  badge: string;
+  clicked: boolean;
+}
+
+/**
+ * Scans the drawer for in-stock store cards and tags them with
+ * `data-cnc-target`. With `clickFirst` the best candidate is also clicked
+ * in-page, inside the same JS turn as the scan — the only way to act on a node
+ * that a re-render may detach a moment later.
+ */
+async function scanAndTagInStockStores(page: Page, clickFirst: boolean): Promise<StorePick[]> {
+  return page.evaluate((doClick: boolean) => {
     const AU_ADDRESS = /\b(?:ACT|NSW|VIC|QLD|SA|WA|TAS|NT)[, ]+\d{4}\b/;
     const AU_ADDRESS_G = /\b(?:ACT|NSW|VIC|QLD|SA|WA|TAS|NT)[, ]+\d{4}\b/g;
     const IN_STOCK = /\bin\s*stock\b/i;
@@ -87,7 +155,13 @@ export async function pickInStockStoreInDrawer(page: Page, log: Logger): Promise
       .querySelectorAll('[data-cnc-target]')
       .forEach((el) => el.removeAttribute('data-cnc-target'));
 
-    const collected: Array<{ heading: string; targetIdx: number; badge: string }> = [];
+    const collected: Array<{
+      heading: string;
+      targetIdx: number;
+      badge: string;
+      clicked: boolean;
+    }> = [];
+    const nodesByKey = new Map<number, HTMLElement>();
     let uid = 0;
 
     const inStockNodes: HTMLElement[] = [];
@@ -118,33 +192,39 @@ export async function pickInStockStoreInDrawer(page: Page, log: Logger): Promise
           if (style.display === 'none' || style.visibility === 'hidden') break;
           const key = ++uid;
           node.setAttribute('data-cnc-target', String(key));
-          const heading =
+          nodesByKey.set(key, node);
+          const heading = (
             node.querySelector('h1, h2, h3, h4, h5, h6, [role="heading"]')?.textContent?.trim() ??
             firstLine.split(/[,·•\d]/)[0].trim() ??
-            '(store)';
-          collected.push({ heading: heading.slice(0, 60), targetIdx: key, badge: 'in-stock' });
+            '(store)'
+          )
+            // The trading-status badge is rendered inside the heading on
+            // this drawer ("Majura Park" + "Closed") — strip it so the log
+            // names the store rather than its opening hours.
+            .replace(/\s*(closed|now open|open( now)?)\s*$/i, '')
+            .trim();
+          collected.push({
+            heading: heading.slice(0, 60) || '(store)',
+            targetIdx: key,
+            badge: 'in-stock',
+            clicked: false,
+          });
           break;
         }
         node = node.parentElement;
       }
     }
+
+    if (doClick && collected.length > 0) {
+      const first = nodesByKey.get(collected[0].targetIdx);
+      if (first) {
+        first.scrollIntoView({ block: 'center' });
+        first.click();
+        collected[0].clicked = true;
+      }
+    }
     return collected;
-  });
-
-  log(`  · in-stock store candidate(s) found: ${picks.length}`);
-  if (picks.length === 0) return null;
-
-  const decisions = picks
-    .map((p) => `"${p.heading}"`)
-    .slice(0, 6)
-    .join(' | ');
-  log(`  · candidates: ${decisions}`);
-
-  const target = page.locator(`[data-cnc-target="${picks[0].targetIdx}"]`).first();
-  await target.scrollIntoViewIfNeeded().catch(() => undefined);
-  log(`  → clicking in-stock store "${picks[0].heading}"`);
-  await target.click({ force: true });
-  return picks[0].heading;
+  }, clickFirst);
 }
 
 /**

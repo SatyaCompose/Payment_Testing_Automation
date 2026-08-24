@@ -93,6 +93,12 @@ export class CheckoutFlow {
     // Express shipping requires online-available + non-dropship products.
     // The PLP "Express delivery available" filter enforces both.
     const opts = { filterExpressOnly: config.shipping === 'express' };
+    // A Click & Collect order needs every line item in stock at one store, so
+    // it must not inherit an earlier run's leftovers — a polluted cart makes
+    // the store scan legitimately find zero in-stock stores.
+    if (config.shipping === 'cnc') {
+      await this.cart.clearCart();
+    }
     if (config.minCartTotalAud !== undefined) {
       await this.cart.addProductsUntilMinTotal(config.minCartTotalAud, 8, opts);
       return;

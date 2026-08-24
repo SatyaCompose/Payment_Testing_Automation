@@ -37,8 +37,66 @@ export class LoginPage extends BasePage {
    * ("Log out"). No-op if we're already signed out.
    */
   async logoutIfLoggedIn(): Promise<void> {
-    // Fastest check: is a "Log out" menu item reachable at all?
-    // We probe the header profile icon and hover to reveal the menu.
+    if (!(await this.isSignedIn())) {
+      // eslint-disable-next-line no-console
+      console.log('[LoginPage] already signed out (no customer in app state)');
+      return;
+    }
+
+    await this.tryHeaderMenuLogout();
+
+    if (await this.isSignedIn()) {
+      // The header profile menu is easy to miss (hover-only, and the icon
+      // renders for guests too). Kinde's own route is deterministic.
+      // eslint-disable-next-line no-console
+      console.log('[LoginPage] header logout did not take — using /api/auth/logout');
+      await this.goto('/api/auth/logout');
+    }
+
+    if (await this.isSignedIn()) {
+      // Never continue: a guest / new-user test would place its order on the
+      // signed-in QA account, producing a confirmation with the wrong email
+      // that looks like a valid pass.
+      throw new Error(
+        'Sign-out failed — still authenticated. A guest/new-user test would place its order on the signed-in account.',
+      );
+    }
+    // eslint-disable-next-line no-console
+    console.log('[LoginPage] ✓ signed out (verified — no customer in app state)');
+  }
+
+  /**
+   * KWH mirrors the signed-in customer into localStorage (`customerId` /
+   * `customerInfo`), which is a far more reliable signal than the header — the
+   * account icon renders for guests too.
+   */
+  private async isSignedIn(): Promise<boolean> {
+    if (!/kitchenwarehouse\.com\.au/i.test(this.page.url())) {
+      await this.goto('/');
+    }
+    const state = await this.page
+      .evaluate(() => {
+        try {
+          return {
+            customerId: localStorage.getItem('customerId') ?? '',
+            customerInfo: localStorage.getItem('customerInfo') ?? '',
+          };
+        } catch {
+          return { customerId: '', customerInfo: '' };
+        }
+      })
+      .catch(() => ({ customerId: '', customerInfo: '' }));
+    const signedIn =
+      state.customerId.trim().length > 0 || /"(email|customerId|id)"\s*:/i.test(state.customerInfo);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[LoginPage] signed-in check: customerId="${state.customerId.slice(0, 24)}" info=${state.customerInfo.slice(0, 40)} → ${signedIn}`,
+    );
+    return signedIn;
+  }
+
+  /** Best-effort header profile menu logout — kept for a real user gesture. */
+  private async tryHeaderMenuLogout(): Promise<void> {
     await this.goto('/');
     const profileIcon = this.page
       .getByRole('button', { name: /account|profile|my account/i })
@@ -48,7 +106,7 @@ export class LoginPage extends BasePage {
 
     if (!(await profileIcon.count().catch(() => 0))) {
       // eslint-disable-next-line no-console
-      console.log('[LoginPage] no profile icon in header — assuming already signed out');
+      console.log('[LoginPage] no profile icon in header — nothing to click, falling back');
       return;
     }
 
@@ -69,7 +127,7 @@ export class LoginPage extends BasePage {
 
     if (!(await logoutItem.count().catch(() => 0))) {
       // eslint-disable-next-line no-console
-      console.log('[LoginPage] no Log out control found — assuming already signed out');
+      console.log('[LoginPage] no Log out control in the header menu — falling back');
       return;
     }
 
@@ -86,8 +144,9 @@ export class LoginPage extends BasePage {
       .first()
       .waitFor({ state: 'visible', timeout: 20_000 })
       .catch(() => undefined);
+    // No success claim here — logoutIfLoggedIn() verifies and decides.
     // eslint-disable-next-line no-console
-    console.log('[LoginPage] ✓ signed out');
+    console.log('[LoginPage] header logout clicked');
   }
 
   async loginWithGoogle(): Promise<void> {

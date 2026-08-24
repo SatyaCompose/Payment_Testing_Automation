@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import type { Logger } from './loginPromptFlow';
 import {
   confirmPickupStore,
@@ -9,7 +9,7 @@ import {
 
 const CNC_TAB_RE = /click\s*(&|and)\s*collect|pick\s*up\s*in\s*store|in-store\s*pickup|store\s*pickup/i;
 const CNC_LAYOUT_MARKER_RE =
-  /your selected store is|change store|who will pick up your order|billing address/i;
+  /your selected store is|change store|who will pick up your order|billing address|stores? with stock close to your location|check store stock|confirm pickup store|select another store/i;
 const DRAWER_HEADING_RE = /check store stock|please select a store where all products are in stock/i;
 const STOCK_WARNING_RE =
   /not all (of )?your items are in stock|items are out of stock for collection|below items are out of stock/i;
@@ -31,35 +31,49 @@ const DRAWER_TRIGGER_PATTERNS: RegExp[] = [
 export async function selectClickAndCollectTab(page: Page, log: Logger): Promise<void> {
   log('step 2 · switching to Click & Collect tab');
 
-  // Mobile checkout renders the Delivery / Click & Collect switcher as
-  // a plain <div> card or a segmented control — no role=tab/button/link.
-  // Match any visible element whose accessible name OR text content
-  // reads as a CNC label, including the widely-styled div/span cases.
-  // `visible: true` filters out the hidden desktop copy that mobile
-  // layouts sometimes keep in the DOM.
-  const tab = page
-    .getByRole('tab', { name: CNC_TAB_RE })
-    .or(page.getByRole('radio', { name: CNC_TAB_RE }))
-    .or(page.getByRole('button', { name: CNC_TAB_RE }))
-    .or(page.getByRole('link', { name: CNC_TAB_RE }))
-    .or(page.locator('label').filter({ hasText: CNC_TAB_RE }))
-    .or(
-      // Mobile fallback — any visible clickable-ish element with the
-      // right text and a compact size (rules out page-level wrappers
-      // whose text contains the phrase across many descendants).
-      page
+  // Candidates in priority order. `.or()` builds a UNION, and `.first()` on a
+  // union resolves to the earliest match in DOM order — which on this checkout
+  // is a page-level wrapper rather than the switcher, so the force-click landed
+  // on nothing and the layout never changed. Trying candidates in order keeps
+  // the real control ahead of the loose text fallback. The checkbox role is the
+  // one that matters here: KWH renders the switcher as
+  // `checkbox "Click and Collect FREE"`, which the old chain never matched.
+  const candidates: Array<{ label: string; locator: Locator; loose?: boolean }> = [
+    { label: 'checkbox', locator: page.getByRole('checkbox', { name: CNC_TAB_RE }) },
+    { label: 'radio', locator: page.getByRole('radio', { name: CNC_TAB_RE }) },
+    { label: 'tab', locator: page.getByRole('tab', { name: CNC_TAB_RE }) },
+    { label: 'button', locator: page.getByRole('button', { name: CNC_TAB_RE }) },
+    { label: 'link', locator: page.getByRole('link', { name: CNC_TAB_RE }) },
+    { label: 'label', locator: page.locator('label').filter({ hasText: CNC_TAB_RE }) },
+    {
+      // Mobile checkout can render the switcher as a plain div card or a
+      // segmented control with no role at all.
+      label: 'compact text node',
+      locator: page
         .locator('div, span, li, [tabindex], [class*="tab" i], [class*="option" i], [class*="segment" i]')
         .filter({ hasText: CNC_TAB_RE }),
-    )
-    .filter({ visible: true })
-    .first();
+      loose: true,
+    },
+  ];
 
-  try {
-    await expect(tab).toBeVisible({ timeout: 10_000 });
-  } catch {
+  let found: Locator | null = null;
+  let how = '';
+  for (const candidate of candidates) {
+    const visible = candidate.locator.filter({ visible: true });
+    const count = await visible.count().catch(() => 0);
+    if (!count) continue;
+    const picked = candidate.loose ? await firstCompactMatch(visible, count) : visible.first();
+    if (!picked) continue;
+    found = picked;
+    how = candidate.label;
+    break;
+  }
+
+  if (!found) {
     await logCncPageSnapshot(page, log);
     throw new Error('No "Click & Collect" tab at step 2 — refusing to fall through to delivery.');
   }
+  const tab = found;
 
   const meta = await tab
     .evaluate((el: Element) => {
@@ -73,7 +87,7 @@ export async function selectClickAndCollectTab(page: Page, log: Logger): Promise
       };
     })
     .catch(() => null);
-  log(`  → clicking CNC tab: ${JSON.stringify(meta)}`);
+  log(`  → clicking CNC control (via ${how}): ${JSON.stringify(meta)}`);
   await tab.scrollIntoViewIfNeeded().catch(() => undefined);
 
   // Real gesture first. If nothing happens (mobile handlers listening
@@ -82,9 +96,16 @@ export async function selectClickAndCollectTab(page: Page, log: Logger): Promise
     .evaluate(() => 'ontouchstart' in window || navigator.maxTouchPoints > 0)
     .catch(() => false);
 
-  const clickStrategies: Array<{ label: string; run: () => Promise<void> }> = [
-    { label: 'click', run: () => tab.click({ force: true, timeout: 5_000 }) },
-  ];
+  const clickStrategies: Array<{ label: string; run: () => Promise<void> }> = [];
+  // A checkbox has an idempotent primitive — use it before a raw click, which
+  // can toggle back off if the app also handles the wrapper's click event.
+  if (how === 'checkbox' || how === 'radio') {
+    clickStrategies.push({
+      label: 'check()',
+      run: () => tab.check({ force: true, timeout: 5_000 }),
+    });
+  }
+  clickStrategies.push({ label: 'click', run: () => tab.click({ force: true, timeout: 5_000 }) });
   if (hasTouch) {
     clickStrategies.push({ label: 'tap', run: () => tab.tap({ force: true, timeout: 5_000 }) });
     clickStrategies.push({
@@ -104,13 +125,7 @@ export async function selectClickAndCollectTab(page: Page, log: Logger): Promise
   for (const { label, run } of clickStrategies) {
     log(`  · try ${label}`);
     await run().catch((err: Error) => log(`    · ${label} threw: ${err.message?.split('\n')[0]}`));
-    const layoutReady = await page
-      .getByText(CNC_LAYOUT_MARKER_RE)
-      .first()
-      .waitFor({ state: 'visible', timeout: 5_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (layoutReady) {
+    if (await cncSwitchConfirmed(page, tab, log)) {
       log(`  ✓ Click & Collect layout is active (via ${label})`);
       return;
     }
@@ -121,6 +136,53 @@ export async function selectClickAndCollectTab(page: Page, log: Logger): Promise
   throw new Error(
     'Clicked "Click & Collect" through every strategy but the CNC layout markers did not appear — refusing to fall through to delivery.',
   );
+}
+
+/**
+ * The loose text locator also matches page-level wrappers whose subtree
+ * contains the phrase. Keep the first match small enough to be the control
+ * itself, so a force-click cannot land on empty wrapper padding.
+ */
+async function firstCompactMatch(locator: Locator, count: number): Promise<Locator | null> {
+  for (let i = 0; i < Math.min(count, 12); i += 1) {
+    const nth = locator.nth(i);
+    const box = await nth.boundingBox().catch(() => null);
+    if (box && box.width <= 560 && box.height <= 160) return nth;
+  }
+  return null;
+}
+
+/**
+ * A switch counts as done when the CNC layout appears, or — on the checkbox
+ * variant of this checkout — when the control reports checked or the Ship
+ * option clears. The layout markers alone were too narrow: until an address
+ * is entered the CNC step can render nothing but the store picker.
+ */
+async function cncSwitchConfirmed(page: Page, control: Locator, log: Logger): Promise<boolean> {
+  const layoutReady = await page
+    .getByText(CNC_LAYOUT_MARKER_RE)
+    .first()
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (layoutReady) return true;
+
+  if (await control.isChecked().catch(() => false)) {
+    log('  · control reports checked — treating the switch as done');
+    return true;
+  }
+
+  const shipChecked = await page
+    .getByRole('checkbox', { name: /^ship\b/i })
+    .first()
+    .isChecked()
+    .catch(() => null);
+  if (shipChecked === false) {
+    log('  · Ship option is no longer checked — treating the switch as done');
+    return true;
+  }
+
+  return false;
 }
 
 /**

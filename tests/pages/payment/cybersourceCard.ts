@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import type { Logger } from './methodSelector';
+import { clearGpayOverlayIfIntercepting } from './overlay';
 import {
   findRealInputInIframe,
   readIframeLabels,
@@ -220,6 +221,10 @@ export async function submitCreditCard(page: Page, log: Logger): Promise<void> {
     .catch(() => null);
   log(`  → clicking "${label.slice(0, 40)}" meta=${JSON.stringify(meta)}`);
   await btn.scrollIntoViewIfNeeded().catch(() => undefined);
+
+  // The Google Pay button sits on top of Place order at the same rect even on
+  // the card path, so a real click can land on Google's element instead.
+  await clearGpayOverlayIfIntercepting(page, log);
 
   // 1st attempt: real browser click.
   await btn.click({ force: true, timeout: 5_000 }).catch((err) => {
