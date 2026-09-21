@@ -185,7 +185,11 @@ export class LoginPage extends BasePage {
   }
 
   async loginWithGoogle(): Promise<void> {
-    // Google SSO opens a popup on Kinde. Uses TEST_USER_EMAIL/PASSWORD.
+    // DEAD CODE — zero callers, and contradicted by observed behaviour: the
+    // Google flow completes inline off the saved session's Google cookies; no
+    // popup is opened. A maintained inline implementation already lives in
+    // tests/pages/checkout/loginPromptFlow.ts. Kept only pending a decision on
+    // removing it, same as login() above.
     const [popup] = await Promise.all([
       this.page.waitForEvent('popup'),
       this.page.getByRole('button', { name: /google/i }).click(),

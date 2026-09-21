@@ -20,6 +20,8 @@ npx playwright install --with-deps
 cp .env.example .env
 # then fill in what you need (see "Environment variables" below)
 
+npm run auth:setup    # required once — opens a real Chrome window, you sign in by hand (see "Auth" below)
+
 # Optional: runner UI
 npm run runner:install
 ```
@@ -76,7 +78,7 @@ tests/
 ├── pages/
 │   ├── BasePage.ts
 │   ├── CartPage.ts                      # random search-term product add + minCartTotal helper
-│   ├── LoginPage.ts                     # Kinde email/pw + Google SSO
+│   ├── LoginPage.ts                     # Google SSO (Kinde email is one-time-code, no password)
 │   ├── RegisterPage.ts
 │   ├── CheckoutPage.ts                  # 3-step flow, random 3-char address search, CNC auto-pick
 │   ├── PaymentPage.ts                   # 4 methods + promo + gift card
@@ -84,7 +86,8 @@ tests/
 ├── flows/
 │   └── CheckoutFlow.ts                  # parameterized (userType × shipping × region × payment)
 ├── fixtures/
-│   ├── auth.ts
+│   ├── auth.ts                          # AUTH_FILE path + credential accessors
+│   ├── authState.ts                     # shared fail-closed "is this session signed in?" rule
 │   ├── testData.ts                      # kitchen search terms, countries, GIFT_CARD_MAX_AUD
 │   └── index.ts                         # merged `test` with page-object fixtures
 ├── reporters/

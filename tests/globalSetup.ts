@@ -18,9 +18,12 @@ async function globalSetup(): Promise<void> {
   if (!fs.existsSync(AUTH_FILE)) {
     throw new Error(
       '\n\nNo saved auth session at tests/.auth/user.json.\n' +
-      'Click "Sign in to browser" in the runner UI first — a real Chrome window\n' +
-      'will open. Sign in to Google, then to KWH, close the window, and every\n' +
-      'subsequent test run reuses that session.\n',
+      'Sign in first:\n' +
+      '  • CLI:  npm run auth:setup\n' +
+      '  • UI:   click "Sign in to browser" in the runner (http://localhost:5173)\n\n' +
+      'A real Chrome window opens — use "Continue with Google". The script saves\n' +
+      'the session and closes the window itself once you are signed in, and every\n' +
+      'subsequent test run reuses it.\n',
     );
   }
   if (!isSignedInFile(AUTH_FILE)) {

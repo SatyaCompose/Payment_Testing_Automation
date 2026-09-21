@@ -44,9 +44,11 @@ playwright.config.ts      # 4 browser projects
 submitting the email address goes straight to "enter the code we just sent
 you", never a password field — so there is no email/password login on Kinde.
 `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` are the Google account used for:
-- Google SSO (same account, `loginWithGoogle()` in `LoginPage`)
+- Google SSO — handled by the saved session's Google cookies from `npm run auth:setup`; no scripted login runs during tests (`loginWithGoogle()` in `LoginPage` is dead code)
 - Safari SSO
 - **Google Pay** — the buyer account is the same
+
+Sign-in (`npm run auth:setup`) is a manual step — a real Chrome window opens and you complete it yourself; it is not scripted. The session is saved only once sign-in genuinely completes — a failed or abandoned attempt leaves any previously saved session untouched, and a run will fail closed with a clear message rather than silently testing as a guest.
 
 Provider-specific creds (PayPal, Afterpay, Apple Pay) live in their own env vars. See `.env.example`.
 
@@ -96,6 +98,7 @@ Re-running on the same date overwrites the file. `screenshots/` is gitignored.
 npm install
 npx playwright install --with-deps
 cp .env.example .env    # fill in creds + product slug + gift/promo codes
+npm run auth:setup      # required once — opens Chrome, you sign in by hand (see Auth)
 
 npm test                          # all browsers, all specs
 npm run test:chromium             # single browser
