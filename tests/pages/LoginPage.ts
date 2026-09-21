@@ -15,8 +15,18 @@ export class LoginPage extends BasePage {
     await this.goto('/Account');
   }
 
+  /**
+   * The header's account control is a hover-only menu BUTTON, not a link —
+   * clicking it navigates nowhere, which is why a `getByRole('link')` here
+   * used to retry against a permanently disabled element and never leave
+   * the page. Hover it, then click the "Log in to manage your account"
+   * item it reveals (which points at the Kinde `/api/auth/login` route).
+   */
   async openFromHeader(): Promise<void> {
-    await this.page.getByRole('link', { name: /account|sign in|log ?in/i }).first().click();
+    await this.page.getByRole('button', { name: /account/i }).first().hover();
+    const loginLink = this.page.getByRole('link', { name: /log in to manage your account/i });
+    await expect(loginLink).toBeVisible();
+    await loginLink.click();
   }
 
   async login(email: string, password: string): Promise<void> {

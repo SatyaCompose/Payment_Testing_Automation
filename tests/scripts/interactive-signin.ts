@@ -168,9 +168,21 @@ async function main() {
   }
 
   // ---------- Step 2: KWH (must succeed) ----------
-  console.log(`👤 Step 2 — sign into KWH at ${STAGING_URL}/Account …`);
-  console.log('   You can use "Continue with Google" if you signed in above, or email + password.');
-  await page.goto(`${STAGING_URL}/Account`, { waitUntil: 'domcontentloaded' });
+  // Go straight to the Kinde-hosted login route rather than /Account.
+  // /Account does NOT render a login form for a signed-out visitor — it
+  // silently redirects to the home page, leaving the operator staring at
+  // the storefront with nothing to sign into (the account control there
+  // is a hover-only menu button, not a link, so it isn't discoverable
+  // either). This is the same URL that menu's "Log in to manage your
+  // account" item points at, observed live on staging.
+  const LOGIN_URL =
+    `${STAGING_URL}/api/auth/login` +
+    `?post_login_redirect_url=${encodeURIComponent(`${STAGING_URL}/`)}`;
+  console.log('👤 Step 2 — sign into Kitchen Warehouse in the window that just opened.');
+  console.log('   Use "Continue with Google" — it is the only route that works unattended.');
+  console.log('   Email + password does NOT use the password: it emails a one-time code,');
+  console.log('   which this script cannot read for you.');
+  await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' });
 
   const waitResult = await waitForSignedIn(page, MANUAL_TIMEOUT_MS);
   if (waitResult === 'closed') {
