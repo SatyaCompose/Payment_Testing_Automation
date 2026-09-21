@@ -2,9 +2,12 @@ import { Page, expect } from '@playwright/test';
 import type { ShippingMethod } from '../../fixtures/testData';
 import type { Logger, WaitForLoadingOverlay } from './loginPromptFlow';
 import {
+  classifyShippingText,
   escapeRegex,
   otherMethodLabels,
+  readCommittedShippingMethod,
   readCurrentlySelectedCardText,
+  readShippingCards,
   shippingMethodAliases,
   shippingMethodLabel,
   shippingMethodTargetRe,
@@ -55,15 +58,36 @@ export async function selectShippingMethod(
     .flat()
     .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');
-  // First: soft wait for the target label to appear at all.
+  // First: soft wait for the target CARD to appear. Scoped to elements
+  // that actually own a checkbox/radio — probing document.body.innerText
+  // matched product marketing copy ("Express Post available") and let the
+  // Express run proceed as if the card had rendered when it never did.
   await page
     .waitForFunction(
-      (aliasPattern: string) => new RegExp(aliasPattern, 'i').test(document.body.innerText),
+      (aliasPattern: string) => {
+        const re = new RegExp(aliasPattern, 'i');
+        const controls = Array.from(
+          document.querySelectorAll(
+            'input[type="checkbox"], input[type="radio"], [role="radio"], [role="checkbox"]',
+          ),
+        );
+        return controls.some((el) => {
+          const wrapping = el.closest('label');
+          if (wrapping && re.test(wrapping.textContent || '')) return true;
+          if (re.test(el.getAttribute('aria-label') || '')) return true;
+          let node: Element | null = el.parentElement;
+          for (let hops = 0; node && hops < 5; hops += 1, node = node.parentElement) {
+            const t = node.textContent || '';
+            if (t.length < 200 && re.test(t)) return true;
+          }
+          return false;
+        });
+      },
       targetAliasList,
       { timeout: 25_000, polling: 500 },
     )
     .catch(() => {
-      log(`  ! shipping section did not render "${target}" (or an alias) in 25s — will still try`);
+      log(`  ! shipping section did not render a "${target}" card (or an alias) in 25s — will still try`);
     });
   // Then: hard wait for a checked default among any shipping label —
   // that's the "rates fetched + default picked" signal. If it never
@@ -96,12 +120,24 @@ export async function selectShippingMethod(
   const others = (Object.keys(shippingMethodAliases) as ShippingMethod[])
     .filter((m) => m !== method)
     .flatMap((m) => shippingMethodAliases[m]);
+  // Enumerate the real controls once — used for the single-option
+  // fast-path and for the diagnostics below.
+  const cards = await readShippingCards(page);
+  const cardSummary = cards.map((c) => (c.checked ? '[x] ' : '[ ] ') + c.text.slice(0, 40));
+  log(`  · shipping-method controls on page: ${JSON.stringify(cardSummary)}`);
   const otherLabelsVisible = await visibleOtherLabels(page, others);
   if (otherLabelsVisible.length === 0) {
-    const targetVisible = await page.getByText(targetRe).first().isVisible().catch(() => false);
-    if (targetVisible) {
+    // Only accept "sole option" when a target-named CONTROL really exists.
+    // Previously this fell back to any page text matching the target, so a
+    // page that offered no Express card at all could be treated as
+    // "Express is the only option" and sail through to payment.
+    const targetCardPresent = cards.some((c) => targetRe.test(c.text));
+    if (targetCardPresent) {
       log(`  → "${target}" is the only shipping method offered — nothing to click, treated as selected`);
       return;
+    }
+    if (cards.length === 0) {
+      log('  ! no shipping-method controls found at all — continuing into the click strategies');
     }
   }
 
@@ -242,16 +278,39 @@ export async function selectShippingMethod(
   // Strategy 2: click the card container that contains the target text
   // but NOT the other methods' texts (excludes parent wrappers).
 
+  // The `has: input` filter is what stops this matching a product
+  // description. Without it, "Ships within 1 business day. Express Post
+  // available." in the order summary satisfied the text filter, `.last()`
+  // resolved to that text node, the click was a no-op, and the run
+  // continued on Standard shipping.
   const card = page
     .locator(':is(button, [role="button"], [role="radio"], label, [tabindex="0"], div, li, article)')
     .filter({ hasText: targetRe })
-    .filter({ hasNotText: notOtherRe });
+    .filter({ hasNotText: notOtherRe })
+    .filter({ has: page.locator('input[type="checkbox"], input[type="radio"], [role="radio"], [role="checkbox"]') });
   const cardCount = await card.count().catch(() => 0);
   log(`  · card candidates matching only "${target}": ${cardCount}`);
 
-  let target_loc = cardCount > 0 ? card.last() : card.first();
-  if (!(await target_loc.count().catch(() => 0))) {
-    log(`  · no clean card container found — falling back to the text node`);
+  let target_loc = card.last();
+  if (cardCount === 0) {
+    if (cards.length > 0) {
+      // Other methods ARE offered as real controls, the requested one is
+      // not. Previously this fell back to `getByText(targetRe).first()`,
+      // which could land on marketing copy, produce a no-op click, and
+      // let the run continue on whatever was already selected. Fail
+      // loudly — shipping the wrong method silently is far worse than a
+      // red test.
+      throw new Error(
+        `"${target}" is not offered as a shipping method on this checkout. ` +
+          `Controls present: ${JSON.stringify(cardSummary)}. ` +
+          `For an Express run this usually means the cart contains a dropship / ` +
+          `non-Express-eligible product — check the PLP "Express delivery available" filter.`,
+      );
+    }
+    // No shipping controls of any kind on the page — a KWH revision that
+    // renders the method as static text. Keep the legacy text fallback so
+    // the single-option international sections don't regress.
+    log('  · no control-bearing shipping card at all — falling back to the text node');
     target_loc = page.getByText(targetRe).first();
   }
   await expect(target_loc).toBeVisible({ timeout: 15_000 });
@@ -288,7 +347,7 @@ export async function selectShippingMethod(
   // STRICT verification — inspect the DOM directly to confirm the
   // target-labelled card is the one currently marked selected. If not,
   // fail loudly instead of proceeding to payment with the wrong method.
-  const verdict = await verifyShippingSelection(page, target, others);
+  const verdict = await verifyShippingSelection(page, target, others, targetAliases);
 
   log(`  · verdict: selected="${verdict.selectedText}" ok=${verdict.ok}`);
   if (!verdict.ok) {
@@ -369,7 +428,7 @@ async function resolveShippingConflictIfPresent(
   page: Page,
   log: Logger,
   method: ShippingMethod,
-): Promise<void> {
+): Promise<boolean> {
   // KWH shows two families of conflict banners at checkout, depending on
   // WHY the cart can't ship to the current address:
   //   A) "Some items ship from a different store" — options:
@@ -391,7 +450,7 @@ async function resolveShippingConflictIfPresent(
       ),
     )
     .catch(() => false);
-  if (!conflictPresent) return;
+  if (!conflictPresent) return false;
 
   // Pick the resolution that preserves the requested shipping mode.
   // For method='cnc' we accept EITHER "Select another store" (store
@@ -519,7 +578,7 @@ async function resolveShippingConflictIfPresent(
 
   if (modalResolved) {
     log('  ✓ conflict resolved, shipping section is rendering');
-    return;
+    return true;
   }
 
   // Fallback: re-click the page-level "Continue to shipping" once. In
@@ -540,6 +599,10 @@ async function resolveShippingConflictIfPresent(
       )
       .catch(() => log('  · shipping still not rendered after nudge — proceeding anyway'));
   }
+  // A conflict banner WAS present and we acted on it, even though the
+  // "resolved" signal never went green — callers must still treat the
+  // shipping rate as potentially reset.
+  return true;
 }
 
 /**
@@ -578,7 +641,15 @@ export async function continueToPayment(
   // it may not have seen the conflict banner (rendered BETWEEN the
   // shipping cards and the Continue button). Re-run the resolver here
   // so an unresolved banner doesn't silently block the button click.
-  await resolveShippingConflictIfPresent(page, log, shippingMethodForConflict);
+  const conflictResolvedHere = await resolveShippingConflictIfPresent(page, log, shippingMethodForConflict);
+
+  // "Ship all items instead" puts the cart back on the default delivery
+  // rate — i.e. Standard. If that ran AFTER selectShippingMethod had
+  // already picked Express, the selection is silently undone. Re-apply it.
+  if (conflictResolvedHere && shippingMethodForConflict !== 'cnc' && shippingMethodForConflict !== 'standard') {
+    log(`  · conflict resolution may have reset the rate — re-selecting ${shippingMethodForConflict}`);
+    await selectShippingMethod(page, log, shippingMethodForConflict);
+  }
 
   const continueRe = /continue\s*to\s*payment|proceed\s*to\s*payment/i;
   // Prefer a real <button> or role="button" with the accessible name —
@@ -743,4 +814,47 @@ async function hasPaymentSectionRendered(page: Page, timeoutMs: number): Promise
 
 function finalizePaymentTransition(_page: Page, log: Logger): void {
   log('  ✓ reached payment step');
+}
+
+/**
+ * Safety net against a false pass: once the checkout has advanced to the
+ * payment step it renders the COMMITTED shipping method in the collapsed
+ * Shipping summary (e.g. "Standard shipping - $9.90"). Every path above
+ * verifies the control we clicked, but KWH can re-price the cart after
+ * that point — a conflict banner resolution, a rate re-fetch, or a
+ * dropship line item silently drops the order back to Standard. Section 2
+ * (Express) was completing orders as Standard for exactly that reason.
+ *
+ * Failure stance is deliberate and asymmetric:
+ *   • summary line found AND it maps to a different method  → THROW.
+ *     A regression suite reporting a green Express run that actually
+ *     shipped Standard is the worst possible outcome.
+ *   • no summary line rendered at all  → log and continue. Absence is a
+ *     layout variance across the four browser projects, not evidence
+ *     that the wrong method was committed, so it must not fail the run.
+ */
+export async function verifyCommittedShippingMethod(
+  page: Page,
+  log: Logger,
+  expected: ShippingMethod,
+): Promise<void> {
+  const line = await readCommittedShippingMethod(page).catch(() => '');
+  if (!line) {
+    log(`  · no committed shipping-method line rendered — cannot cross-check ${expected} (continuing)`);
+    return;
+  }
+  const actual = classifyShippingText(line);
+  if (actual === expected) {
+    log(`  ✓ committed shipping method confirmed: "${line}"`);
+    return;
+  }
+  if (actual === null) {
+    log(`  · committed shipping line "${line}" matches no known method — cannot cross-check (continuing)`);
+    return;
+  }
+  throw new Error(
+    `Checkout committed the wrong shipping method. Expected "${shippingMethodLabel[expected]}" ` +
+      `but the payment step reports "${line}" (${actual}). ` +
+      `The order would have been placed on ${actual} shipping, making this a false pass.`,
+  );
 }

@@ -263,7 +263,69 @@ export class OrderConfirmationPage extends BasePage {
         /* ignore — Playwright will overwrite anyway */
       }
     }
-    await this.page.screenshot({ path: file, fullPage: true });
+    // The confirmation lays out on a 1920px canvas with wide empty gutters
+    // and trailing whitespace, so a fullPage shot is mostly blank. Measure
+    // the smallest rectangle enclosing the visible leaf content and clip to
+    // that instead. Falls back to the fullPage shot if nothing measurable is
+    // found, so the evidence is never lost to a bad measurement.
+    const clip = await this.page
+      .evaluate(() => {
+        const root = document.querySelector('main') ?? document.body;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        const pageWidth = Math.max(document.documentElement.scrollWidth, window.innerWidth);
+        const pageHeight = Math.max(document.documentElement.scrollHeight, window.innerHeight);
+        const visit = (el: Element): void => {
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return;
+          if (Number(style.opacity) <= 0.05) return;
+          const rect = el.getBoundingClientRect();
+          const x = rect.left + window.scrollX;
+          const y = rect.top + window.scrollY;
+          // Screen-reader-only text is parked off-canvas (left: -9999px)
+          // and sub-pixel spacers carry no ink — either one would blow the
+          // measured box back out to the full page.
+          const onCanvas =
+            rect.width >= 2 &&
+            rect.height >= 2 &&
+            x >= 0 &&
+            y >= 0 &&
+            x + rect.width <= pageWidth + 1 &&
+            y + rect.height <= pageHeight + 1;
+          const paints =
+            onCanvas &&
+            (el.childElementCount === 0
+              ? Boolean(el.textContent?.trim()) || ['IMG', 'SVG', 'svg'].includes(el.tagName)
+              : false);
+          if (paints) {
+            minX = Math.min(minX, rect.left + window.scrollX);
+            minY = Math.min(minY, rect.top + window.scrollY);
+            maxX = Math.max(maxX, rect.right + window.scrollX);
+            maxY = Math.max(maxY, rect.bottom + window.scrollY);
+          }
+          for (const child of Array.from(el.children)) visit(child);
+        };
+        visit(root);
+        if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return null;
+        const pad = 24;
+        const x = Math.max(0, minX - pad);
+        const y = Math.max(0, minY - pad);
+        return {
+          x,
+          y,
+          width: Math.min(pageWidth - x, maxX - minX + pad * 2),
+          height: Math.min(pageHeight - y, maxY - minY + pad * 2),
+        };
+      })
+      .catch(() => null);
+
+    await this.page.screenshot(
+      clip && clip.width > 0 && clip.height > 0
+        ? { path: file, fullPage: true, clip }
+        : { path: file, fullPage: true },
+    );
 
     // Restore the cursor overlay so subsequent tests keep the visual aid.
     await this.page

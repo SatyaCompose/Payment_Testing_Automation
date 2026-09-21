@@ -198,6 +198,12 @@ export class CheckoutFlow {
     }
     await this.checkout.selectShippingMethod(config.shipping);
     await this.checkout.continueToPayment(config.shipping);
+    // Last line of defence. The payment step echoes the rate the checkout
+    // actually committed; section 2 was completing Express orders on
+    // Standard shipping and still reporting a pass because nothing read
+    // that echo back. Throws on a confirmed mismatch, no-ops when the
+    // summary isn't rendered.
+    await this.checkout.verifyCommittedShippingMethod(config.shipping);
   }
 
   /**

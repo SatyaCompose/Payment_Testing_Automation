@@ -275,21 +275,61 @@ async function applyExpressDeliveryFilter(
   log('  → applying "Express delivery available" filter (Express-only run)');
   // KWH renders the facet in both a desktop sidebar AND a hidden mobile
   // drawer; a raw `.first()` picks the drawer copy and fails on click.
-  // Scope to the visible one.
+  // Scope to the visible one, and require it to OWN a checkbox — product
+  // cards carry an "Express delivery available" badge too, and an <a>
+  // match there navigated to the product page instead of filtering.
+  const facetControl = 'input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]';
   const filter = page
-    .locator('label, button, [role="button"], a, [role="checkbox"]')
+    .locator('label, button, [role="button"], [role="checkbox"]')
     .filter({ hasText: /express\s*delivery\s*available/i })
+    .filter({ has: page.locator(facetControl) })
     .filter({ visible: true })
     .first();
   if (!(await filter.count().catch(() => 0))) {
-    throw new Error('No "Express delivery available" filter on the results page');
+    throw new Error('No "Express delivery available" filter facet on the results page');
   }
   await filter.scrollIntoViewIfNeeded().catch(() => undefined);
+
+  // Snapshot the current result set so we can tell the PLP really
+  // re-queried rather than the click landing on a dead wrapper.
+  const urlBefore = page.url();
+  const countBefore = await page.locator('a[href*="/product/"]').count().catch(() => 0);
+
   await filter.click();
   await waitForOverlay();
-  // Give the PLP a moment to swap in the filtered set.
-  await page
-    .waitForLoadState('networkidle', { timeout: 8_000 })
-    .catch(() => undefined);
-  log('  ✓ Express filter applied');
+
+  // Confirm the facet actually engaged. A blind click here is what let an
+  // unfiltered (possibly dropship) product into the cart, which in turn
+  // meant Express was never offered at checkout. Accept any one of:
+  // the facet's control reporting checked, the URL gaining facet state,
+  // or the result count changing.
+  const input = filter.locator(facetControl).first();
+  const applied = await page
+    .waitForFunction(
+      ({ before, prevUrl }: { before: number; prevUrl: string }) => {
+        const boxes = Array.from(
+          document.querySelectorAll('input[type="checkbox"], input[type="radio"]'),
+        ) as HTMLInputElement[];
+        const facetChecked = boxes.some((b) => {
+          const name = b.closest('label')?.textContent || b.getAttribute('aria-label') || '';
+          return /express\s*delivery\s*available/i.test(name) && b.checked;
+        });
+        const urlChanged = window.location.href !== prevUrl;
+        const countChanged = document.querySelectorAll('a[href*="/product/"]').length !== before;
+        return facetChecked || urlChanged || countChanged;
+      },
+      { before: countBefore, prevUrl: urlBefore },
+      { timeout: 10_000, polling: 300 },
+    )
+    .then(() => true)
+    .catch(() => false);
+
+  if (!applied) {
+    throw new Error(
+      'Clicked the "Express delivery available" facet but the results did not change ' +
+        '— the filter never applied, so the picked product may not be Express-eligible.',
+    );
+  }
+  const checkedNow = await input.isChecked().catch(() => false);
+  log(`  ✓ Express filter applied (facet checked: ${checkedNow})`);
 }

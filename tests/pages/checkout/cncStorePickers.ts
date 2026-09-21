@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, Locator, expect } from '@playwright/test';
 import type { Logger } from './loginPromptFlow';
 
 /** Any status that means "not fully in stock — skip this store." */

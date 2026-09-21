@@ -19,6 +19,7 @@ import {
   selectShippingMethod,
   selectFirstInStockCncStore,
   continueToPayment,
+  verifyCommittedShippingMethod,
 } from './checkout/shippingMethod';
 import { selectClickAndCollectTab } from './checkout/cncStore';
 import { fillCncPickupContact, fillCncBillingContact } from './checkout/cncContact';
@@ -127,5 +128,10 @@ export class CheckoutPage extends BasePage {
 
   async continueToPayment(shippingMethodForConflict?: ShippingMethod): Promise<void> {
     await continueToPayment(this.page, this.logMsg, this.overlayWaiter, shippingMethodForConflict);
+  }
+
+  /** Cross-check the method the checkout actually committed, once on step 3. */
+  async verifyCommittedShippingMethod(method: ShippingMethod): Promise<void> {
+    await verifyCommittedShippingMethod(this.page, this.logMsg, method);
   }
 }

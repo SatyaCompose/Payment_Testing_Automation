@@ -21,7 +21,15 @@ export const shippingMethodLabel: Record<ShippingMethod, string> = {
  */
 export const shippingMethodAliases: Record<ShippingMethod, string[]> = {
   standard: ['Standard shipping', 'Standard delivery'],
-  express: ['Express shipping', 'Express delivery', 'Express Post'],
+  // 'Express Post' was removed deliberately. KWH product descriptions
+  // carry marketing copy like "Ships within 1 business day. Express Post
+  // available." — with that alias in the list, `shippingMethodTargetRe`
+  // matched the product blurb, the card-click path clicked a plain text
+  // node, and section 2 orders shipped as Standard while the suite
+  // reported a pass (observed on 2.2: payment step read
+  // "Standard shipping - $9.90"). Aliases here must only ever be real
+  // card names, never phrases that can appear in body copy.
+  express: ['Express shipping', 'Express delivery'],
   international: [
     'International shipping',
     'International delivery',
@@ -67,18 +75,116 @@ export function otherMethodLabels(method: ShippingMethod): string[] {
     .map(([, t]) => t);
 }
 
+export interface ShippingCard {
+  /** Trimmed accessible text of the card (max 120 chars). */
+  text: string;
+  checked: boolean;
+}
+
 /**
- * Returns the subset of other-method labels currently rendered anywhere
- * on the page. Empty result → the target is the only method offered.
+ * Enumerates the actual shipping-method CONTROLS on the page — i.e. a
+ * checkbox/radio (native or ARIA) whose accessible name matches a known
+ * method alias. Deliberately does NOT read `document.body.innerText`:
+ * product descriptions, order-summary lines and promo banners all
+ * mention delivery wording, and scanning body text is what let the
+ * Express run mistake a product blurb for a shipping card.
+ */
+export async function readShippingCards(page: Page): Promise<ShippingCard[]> {
+  const allAliases = (Object.values(shippingMethodAliases) as string[][]).flat();
+  return page.evaluate((aliases: string[]) => {
+    const methodRe = new RegExp(
+      aliases.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+      'i',
+    );
+    const controls = Array.from(
+      document.querySelectorAll(
+        'input[type="checkbox"], input[type="radio"], [role="radio"], [role="checkbox"]',
+      ),
+    ) as HTMLElement[];
+
+    const nameFor = (el: HTMLElement): string => {
+      const wrapping = el.closest('label');
+      if (wrapping?.textContent && methodRe.test(wrapping.textContent)) return wrapping.textContent;
+      const aria = el.getAttribute('aria-label');
+      if (aria && methodRe.test(aria)) return aria;
+      if (el.id) {
+        const forLabel = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        if (forLabel?.textContent && methodRe.test(forLabel.textContent)) return forLabel.textContent;
+      }
+      // Nearest small ancestor that names a method — bounded text length
+      // so a whole step wrapper can't masquerade as one card.
+      let node: HTMLElement | null = el.parentElement;
+      for (let hops = 0; node && hops < 5; hops += 1, node = node.parentElement) {
+        const t = node.textContent || '';
+        if (t.length < 200 && methodRe.test(t)) return t;
+      }
+      return '';
+    };
+
+    const seen = new Set<string>();
+    const cards: { text: string; checked: boolean }[] = [];
+    for (const el of controls) {
+      const name = nameFor(el).trim().replace(/\s+/g, ' ').slice(0, 120);
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      const checked =
+        (el as HTMLInputElement).checked === true || el.getAttribute('aria-checked') === 'true';
+      cards.push({ text: name, checked });
+    }
+    return cards;
+  }, allAliases);
+}
+
+/**
+ * Returns the subset of other-method labels that are rendered as real
+ * shipping-method CONTROLS. Empty result → the target is the only method
+ * offered (common for international destinations).
  */
 export async function visibleOtherLabels(page: Page, others: string[]): Promise<string[]> {
-  return page.evaluate(
-    (labels) => {
-      const text = (document.body.innerText || '').toLowerCase();
-      return labels.filter((l) => text.includes(l.toLowerCase()));
-    },
-    others,
+  const cards = await readShippingCards(page);
+  const cardText = cards.map((c) => c.text.toLowerCase());
+  return others.filter((l) => cardText.some((t) => t.includes(l.toLowerCase())));
+}
+
+/**
+ * Reads the shipping method the checkout has actually COMMITTED, as
+ * rendered in the collapsed Shipping summary on the payment step
+ * (e.g. "Standard shipping - $9.90"). Returns an empty string when no
+ * such line is rendered.
+ */
+export async function readCommittedShippingMethod(page: Page): Promise<string> {
+  const allAliases = (Object.values(shippingMethodAliases) as string[][]).flat();
+  return page.evaluate((aliases: string[]) => {
+    const methodRe = new RegExp(
+      aliases.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+      'i',
+    );
+    // Leaf-ish nodes only: the summary line is a short standalone element,
+    // never a wrapper that also contains the address block.
+    const candidates = Array.from(document.querySelectorAll('div, span, p, li, dd, strong'))
+      .filter((el) => {
+        const t = (el.textContent || '').trim();
+        if (!t || t.length > 80 || !methodRe.test(t)) return false;
+        return !Array.from(el.children).some((c) => methodRe.test((c.textContent || '').trim()));
+      })
+      .map((el) => (el.textContent || '').trim().replace(/\s+/g, ' '));
+    // Prefer a line that also carries a price or "free" — that is the
+    // committed summary rather than a heading.
+    const priced = candidates.find((t) => /\$\s?[\d,.]+|\bfree\b/i.test(t));
+    return (priced || candidates[0] || '').slice(0, 80);
+  }, allAliases);
+}
+
+/**
+ * Classifies a rendered shipping line back to a ShippingMethod, or null
+ * when it matches none / is ambiguous.
+ */
+export function classifyShippingText(text: string): ShippingMethod | null {
+  const lower = text.toLowerCase();
+  const hits = (Object.keys(shippingMethodAliases) as ShippingMethod[]).filter((m) =>
+    shippingMethodAliases[m].some((a) => lower.includes(a.toLowerCase())),
   );
+  return hits.length === 1 ? hits[0] : null;
 }
 
 /**

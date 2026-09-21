@@ -17,6 +17,7 @@
     "test:afterpay": "playwright test tests/payments/afterpay",
     "test:gpay": "playwright test tests/payments/gpay",
     "report": "playwright show-report",
+    "screenshots:crop": "node tests/scripts/crop-confirmation-screenshots.mjs",
     "codegen": "playwright codegen",
     "install-browsers": "playwright install --with-deps",
     "auth:setup": "tsx tests/scripts/interactive-signin.ts",
