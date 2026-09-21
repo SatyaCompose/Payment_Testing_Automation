@@ -32,7 +32,7 @@ tests/
   fixtures/               # merged test, buyer/address data
   utils/testCards.ts      # Cybersource sandbox cards
   .auth/                  # storageState (gitignored)
-  auth.setup.ts           # signs in TEST_USER_* once
+  auth.setup.ts           # unused — testIgnore'd, never runs (see Auth)
 playwright.config.ts      # 4 browser projects
 .github/workflows/        # CI matrix per browser
 .claude/agents/           # playwright-specialist, payments-qa, test-report-reviewer

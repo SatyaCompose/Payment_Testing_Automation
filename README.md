@@ -94,7 +94,7 @@ tests/
 │   ├── runTimestamp.ts                  # `18/07/2026` display + `18-07-2026` filename helpers
 │   └── testCards.ts                     # Cybersource sandbox card catalog
 ├── .auth/                               # storageState (gitignored)
-├── auth.setup.ts                        # signs into Google → then KWH via Kinde
+├── auth.setup.ts                        # unused — testIgnore'd, never runs
 ├── globalTeardown.ts                    # writes dated regression MD report
 
 runner/                                  # React operator dashboard (see runner/README.md)
@@ -116,7 +116,7 @@ CLAUDE.md
 - **Address** — random 3-char string (letters or digits) typed into the site's address autocomplete, scoped to the country select. First suggestion is picked. Retries up to 3 times if no results.
 - **CNC store** — auto-picks the first store showing "In Stock".
 - **Gift card** — fetches the KWH gift-card Google Sheet at run time, returns the first row where `Status` is empty. Falls back to `GIFT_CARD_NUMBER` env var if the sheet is private.
-- **Auth** — `tests/auth.setup.ts` signs into Google (`accounts.google.com`) first, then KWH via Kinde, and saves one combined `storageState`. Every browser project loads it, so **Google Pay tests don't need per-test credentials** — the browser is already signed into the Google account.
+- **Auth** — sign in once, by hand: `npm run auth:setup` (`tests/scripts/interactive-signin.ts`) opens a real Chrome window, you sign into Google and then KWH via Kinde, and it saves one combined `storageState` to `tests/.auth/user.json`. Every browser project loads it via the `sharedContext` fixture, so **Google Pay tests don't need per-test credentials** — the browser is already signed into the Google account. `tests/auth.setup.ts` is `testIgnore`'d and never runs.
 - **Screenshots** — every successful order-confirmation is captured to `screenshots/<test-id>/<browser>-order-confirmation.png`. A single dated markdown file is written at run end: `screenshots/Final regression testing document for payments - DD-MM-YYYY.md`, laid out in the exact section order of the source Google Doc.
 
 ---
@@ -158,7 +158,7 @@ Four Playwright projects in `playwright.config.ts`:
 
 Playwright uses the **WebKit** and **Chromium** engines — not the real Safari or Chrome binaries. Fine for CI regression, but confirm real-Safari and real-Chrome-on-Windows bugs on actual devices. Google Pay's full flow requires real Chrome + real device; CI asserts the pay sheet surfaces.
 
-Every project depends on the `setup` project (`auth.setup.ts`) and loads `tests/.auth/user.json` as `storageState`.
+There is no Playwright `setup` project — `globalSetup` checks the saved session is genuinely signed in, and every project loads `tests/.auth/user.json` as `storageState` via the `sharedContext` fixture.
 
 ---
 
@@ -227,7 +227,7 @@ Three subagents live in `.claude/agents/`:
 
 ## Troubleshooting
 
-- **Google sign-in blocked in `auth.setup.ts`** → Google detects automation. Sign in manually via `npx playwright codegen https://accounts.google.com/signin`, save the resulting storageState to `tests/.auth/user.json`, and re-run. For persistent CI, use `channel: 'chrome'` + a real user data dir.
+- **Google sign-in blocked during `npm run auth:setup`** → Google detects automation. Sign in manually via `npx playwright codegen https://accounts.google.com/signin`, save the resulting storageState to `tests/.auth/user.json`, and re-run. For persistent CI, use `channel: 'chrome'` + a real user data dir.
 - **Cybersource fields not found** → iframe `src`/`title` changed. Run `npx playwright codegen https://staging.kitchenwarehouse.com.au/checkout` and update `PaymentPage.cybersourceFrame()`.
 - **Address suggestions never appear** → the random 3-char string may not resolve. `pickAddress()` retries up to 3 times; if you're seeing repeat failures, narrow the addressing input via a stable seed.
 - **Gift card sheet returns HTML instead of CSV** → the sheet isn't shared publicly. Set the sheet to "Anyone with the link — Viewer" or set `GIFT_CARD_NUMBER` as fallback.

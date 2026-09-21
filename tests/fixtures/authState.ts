@@ -5,9 +5,9 @@ import { AUTH_FILE } from './auth';
 
 // Playwright's own entry points (playwright.config.ts, interactive-signin.ts)
 // each load the root `.env` themselves before reading `process.env.STAGING_URL`.
-// The runner server (runner/server/*) does NOT — it has no such load anywhere
-// in its own import graph. Relying on an import elsewhere to have loaded it
-// first is fragile: `import` statements execute top-to-bottom as written, so
+// The runner server (runner/server/*) had no such load at all when this
+// bug was found; it now loads the root .env too (runner/server/index.ts),
+// but relying on any importer to have done so first is fragile: `import` statements execute top-to-bottom as written, so
 // whichever file imports this module first and doesn't load dotenv would
 // silently compute STAGING_ORIGIN from an unset env var. Loading it here,
 // before STAGING_ORIGIN is computed below, makes this module self-sufficient
@@ -56,8 +56,10 @@ dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
  * part of this repo (globalSetup, the runner) assumes.
  */
 
-/** Only file with zero dependency on this constant is this one — everyone else imports it from here. */
-export { AUTH_FILE };
+// AUTH_FILE is imported above purely as the default argument to
+// isSignedInFile below. It is deliberately NOT re-exported from here:
+// every consumer already imports it straight from ./auth, and a second
+// export path would just be two names for one constant.
 
 /**
  * Origin whose localStorage we inspect. Derived from STAGING_URL so this
