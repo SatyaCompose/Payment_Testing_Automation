@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from './BasePage';
-import { evaluateSignedIn, readCustomerState } from '../fixtures/authState';
+import { STAGING_ORIGIN, evaluateSignedIn, readCustomerState } from '../fixtures/authState';
 
 /**
  * KWH uses Kinde for auth, hosted at `/api/auth/login`.
@@ -20,12 +20,18 @@ export class LoginPage extends BasePage {
     super(page);
   }
 
-  /** Kinde's hosted sign-in, returning to the site root once complete. */
+  /**
+   * Kinde's hosted sign-in, returning to the storefront root once done.
+   *
+   * The redirect target is built from the fixed `STAGING_ORIGIN`, never
+   * from `this.page.url()`: deriving it from wherever the page happens to
+   * sit would, on a retry that starts from the Kinde-hosted page, ask
+   * Kinde to send the browser back to *itself* instead of to the store —
+   * a silent wrong-domain redirect. `tests/scripts/interactive-signin.ts`
+   * builds the same URL the same way.
+   */
   async open(): Promise<void> {
-    const base = this.page.url().startsWith('http')
-      ? new URL(this.page.url()).origin
-      : '';
-    const target = encodeURIComponent(`${base}/`);
+    const target = encodeURIComponent(`${STAGING_ORIGIN}/`);
     await this.goto(`/api/auth/login?post_login_redirect_url=${target}`);
   }
 
@@ -41,9 +47,10 @@ export class LoginPage extends BasePage {
    * Kinde route directly.
    *
    * The accessible name is exactly "Account"; matched with `exact` so it
-   * cannot also catch "Create an account" / "My account". Both locators
-   * take `.first()` because the header ships duplicate desktop + mobile
-   * markup, and a bare match would trip strict mode rather than click.
+   * cannot also catch "Create an account" / "My account". `.first()` is
+   * defensive only — live counts at both 1280x720 and 390x844 show
+   * exactly one of each element, so this is NOT a known duplicate-markup
+   * header; do not cite it as precedent for one.
    */
   async openFromHeader(): Promise<void> {
     await this.page.getByRole('button', { name: 'Account', exact: true }).first().hover();

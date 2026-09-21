@@ -128,7 +128,7 @@ Full list in `.env.example`. Highlights:
 | Var                                     | Purpose                                                            |
 | --------------------------------------- | ------------------------------------------------------------------ |
 | `STAGING_URL`                           | Base URL (`https://staging.kitchenwarehouse.com.au`)               |
-| `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`| Google account (used by Kinde direct login + Google SSO + GPay)    |
+| `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`| Google account (used by Google SSO + GPay — Kinde's own email login is one-time-code only, no password) |
 | `GUEST_EXISTING_EMAIL`                  | Registered email used in guest-checkout specs                      |
 | `TEST_CARD_*`                           | Cybersource sandbox card (holder not needed)                       |
 | `PAYPAL_SANDBOX_*`                      | PayPal sandbox buyer                                               |

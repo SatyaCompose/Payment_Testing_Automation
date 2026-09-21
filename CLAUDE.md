@@ -40,8 +40,10 @@ playwright.config.ts      # 4 browser projects
 
 ## Auth
 
-**Kinde** handles login. `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` work for:
-- Direct email/password login on Kinde
+**Kinde** handles login. Kinde's own email route is one-time-code only —
+submitting the email address goes straight to "enter the code we just sent
+you", never a password field — so there is no email/password login on Kinde.
+`TEST_USER_EMAIL` / `TEST_USER_PASSWORD` are the Google account used for:
 - Google SSO (same account, `loginWithGoogle()` in `LoginPage`)
 - Safari SSO
 - **Google Pay** — the buyer account is the same
