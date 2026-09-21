@@ -24,7 +24,35 @@ import { CURSOR_OVERLAY_SCRIPT } from '../utils/cursorOverlay';
 // detection surfaces (webdriver flag, WebGL fingerprint, plugin list,
 // chrome runtime, permissions API, etc.). Enables Google Pay's SDK to
 // render its sheet contents under Playwright automation.
-chromiumExtra.use(StealthPlugin());
+//
+// `user-agent-override` is disabled on purpose. That evasion's
+// `onPageCreated` hook calls CDP `Network.setUserAgentOverride` with a
+// UA it derives from `page.browser().userAgent()` — the browser's own
+// baseline UA — AFTER Playwright has already applied the context-level
+// `userAgent` option (see `projectContextOptions` below and
+// `tests/scripts/interactive-signin.ts`). That silently overwrote both:
+//   - `chromium-desktop`'s intended `devices['Desktop Chrome']` UA with a
+//     same-Chrome-but-different-build-number string (measured:
+//     `Chrome/149.0.7827.55` requested vs `Chrome/149.0.0.0` served),
+//     which breaks the UA-binding this suite relies on to keep the
+//     signed-in session's Cloudflare `cf_clearance` cookie valid at test
+//     time.
+//   - `android-chrome`'s `devices['Pixel 7']` UA with a desktop UA
+//     entirely — the project wasn't even emulating mobile.
+// Every stealth launch here runs headed (`headless: false`), so the
+// baseline UA never contains "HeadlessChrome" — the one thing this
+// evasion exists to strip — meaning it protects against nothing our own
+// context-level `userAgent` doesn't already handle. Trade-off: with the
+// evasion off, `navigator.userAgentData` may no longer be rewritten to
+// agree with a spoofed UA. Accepted — Google Pay's sheet is already
+// undriveable under automation and its specs are skipped (see
+// tests/payments/gpay/MANUAL.md), so this evasion wasn't buying a
+// working GPay path anyway, while a correct UA is required for both
+// session validity and honest mobile emulation. Do not re-enable this
+// without re-measuring both projects' `navigator.userAgent`.
+const stealth = StealthPlugin();
+stealth.enabledEvasions.delete('user-agent-override');
+chromiumExtra.use(stealth);
 
 interface Fixtures {
   cartPage: CartPage;
@@ -259,11 +287,16 @@ test.beforeEach(async ({}, testInfo) => {
   const existing = shouldSkipBecauseScreenshotExists(testInfo.title, testInfo.project.name);
   if (existing) {
     testInfo.annotations.push({
-      type: 'skipped-already-passed',
-      description: `Screenshot already exists: ${path.relative(process.cwd(), existing)}`,
+      type: 'skipped-not-run',
+      description: `Skipped — did not run this pass because a prior confirmation screenshot already exists at ${path.relative(process.cwd(), existing)}. This is not a pass; delete the file to re-run.`,
     });
-    console.log(`[skip] "${testInfo.title}" — already has a confirmation screenshot at ${existing}`);
-    test.skip(true, `Already passed — delete ${path.relative(process.cwd(), existing)} to re-run.`);
+    // stdout, not stderr: the runner server parses stdout line by line and
+    // broadcasts each line to the dashboard, while its stderr handler keeps
+    // only the last 3 lines of a chunk — a batch of auto-skips written to
+    // stderr would be silently truncated on exactly the screen where this
+    // warning matters most. The wording carries the loudness, not the channel.
+    console.log(`[skip] WARNING: "${testInfo.title}" did NOT run this pass — a confirmation screenshot already exists at ${existing}; this result proves nothing. Delete it to re-run.`);
+    test.skip(true, `Did not run — a confirmation screenshot already exists. Delete ${path.relative(process.cwd(), existing)} to re-run.`);
   }
 });
 

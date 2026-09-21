@@ -2,6 +2,11 @@ import { type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import type { SseBroadcaster } from './sseBroadcaster';
 import { killTree, spawnCli } from './procUtils';
+// Shared with tests/pages/LoginPage.ts, tests/globalSetup.ts and
+// tests/auth.setup.ts — do NOT re-derive the "signed in" rule here.
+// This predicate is pure Node (fs + JSON), so it has no Playwright
+// dependency and imports cleanly across the runner's separate tsconfig.
+import { isSignedInFile } from '../../tests/fixtures/authState';
 
 export interface AuthStatus {
   signedIn: boolean;
@@ -28,8 +33,14 @@ export class AuthSession {
   ) {}
 
   status(): AuthStatus {
-    const signedIn = fs.existsSync(this.authFile);
-    const since = signedIn ? fs.statSync(this.authFile).mtime.toISOString() : undefined;
+    // File existence alone used to be treated as "signed in" — that let a
+    // guest session (which still writes a valid-looking storageState file)
+    // show a green "signed in" state in the UI. `since` intentionally still
+    // reflects the file's mtime whenever it exists, signed-in or not, so
+    // the UI can show "last attempt at …" even for a failed capture.
+    const exists = fs.existsSync(this.authFile);
+    const signedIn = exists && isSignedInFile(this.authFile);
+    const since = exists ? fs.statSync(this.authFile).mtime.toISOString() : undefined;
     const running = !!(this.child && !this.child.killed);
     return { signedIn, since, running };
   }
@@ -88,7 +99,11 @@ export class AuthSession {
     this.child.stderr?.on('data', forward('error'));
 
     this.child.on('exit', (code) => {
-      const ok = code === 0 && fs.existsSync(this.authFile);
+      // "File exists" used to count as success, which reported a green
+      // check even when interactive-signin.ts captured (and, pre-fix,
+      // would have saved) a guest session. The script itself now refuses
+      // to write a non-signed-in capture, but this check stays defensive.
+      const ok = code === 0 && isSignedInFile(this.authFile);
       this.broadcaster.broadcast({
         type: 'auth-end',
         ok,

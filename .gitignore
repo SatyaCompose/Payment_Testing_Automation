@@ -18,6 +18,7 @@ tests/.auth/*.json
 
 # Confirmation screenshots — paste into Google Doc, don't commit binaries
 /screenshots/
+deliverables
 
 # Runner UI build output
 runner/node_modules/

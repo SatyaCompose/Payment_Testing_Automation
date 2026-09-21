@@ -1,3 +1,4 @@
+import { test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import type { Logger } from './loginPromptFlow';
 import {
@@ -211,7 +212,16 @@ export async function selectFirstInStockCncStore(page: Page, log: Logger): Promi
 
   if (isPreSelected && !stockWarningVisible) {
     const text = ((await preSelected.textContent().catch(() => null)) ?? '').trim();
-    log(`  ✓ store already pre-selected (no stock warning): "${text.slice(0, 80)}"`);
+    log(
+      `  ⚠ FAST PATH: the site had already pre-selected a store ("${text.slice(0, 80)}") — no store selection was performed by this test.`
+    );
+    try {
+      // test.info() throws outside a running test — catch degrades to the log line above only.
+      test.info().annotations.push({
+        type: 'CNC store pre-selected by site — no selection performed',
+        description: `Store "${text.slice(0, 80)}" was already selected by KWH; this test never reached the store-selection code it exists to cover.`,
+      });
+    } catch {}
     return text;
   }
   if (stockWarningVisible) {

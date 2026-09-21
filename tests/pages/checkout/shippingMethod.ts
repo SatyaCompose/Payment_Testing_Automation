@@ -293,7 +293,13 @@ export async function selectShippingMethod(
 
   let target_loc = card.last();
   if (cardCount === 0) {
-    if (cards.length > 0) {
+    // Only conclude "not offered" from the control scan, which is the
+    // authority. `card` and `cards` use different rules (descendant vs
+    // nearest-ancestor), so they can disagree on a label[for] layout —
+    // throwing on that disagreement would red a run whose Express card
+    // is actually present.
+    const targetOffered = cards.some((c) => targetRe.test(c.text));
+    if (cards.length > 0 && !targetOffered) {
       // Other methods ARE offered as real controls, the requested one is
       // not. Previously this fell back to `getByText(targetRe).first()`,
       // which could land on marketing copy, produce a no-op click, and
@@ -307,10 +313,18 @@ export async function selectShippingMethod(
           `non-Express-eligible product — check the PLP "Express delivery available" filter.`,
       );
     }
-    // No shipping controls of any kind on the page — a KWH revision that
-    // renders the method as static text. Keep the legacy text fallback so
-    // the single-option international sections don't regress.
-    log('  · no control-bearing shipping card at all — falling back to the text node');
+    // Either no shipping controls at all (a KWH revision that renders the
+    // method as static text — the single-option international sections
+    // rely on this) or the control scan sees the target while the card
+    // locator doesn't. Both are safe to attempt via the text node: the
+    // strict verification at the end of this function, and
+    // verifyCommittedShippingMethod at the payment step, still gate the
+    // outcome, so a no-op click here cannot become a false pass.
+    log(
+      targetOffered
+        ? `  · "${target}" control found but no clickable card container — falling back to the text node`
+        : '  · no control-bearing shipping card at all — falling back to the text node',
+    );
     target_loc = page.getByText(targetRe).first();
   }
   await expect(target_loc).toBeVisible({ timeout: 15_000 });
@@ -645,10 +659,20 @@ export async function continueToPayment(
 
   // "Ship all items instead" puts the cart back on the default delivery
   // rate — i.e. Standard. If that ran AFTER selectShippingMethod had
-  // already picked Express, the selection is silently undone. Re-apply it.
+  // already picked Express, the selection is silently undone. Re-apply
+  // it — but gate on the actual control state, not on the banner having
+  // been seen: the banner probe is text-based and returns true even on
+  // the "proceeding anyway" path, and a needless re-select can now throw.
   if (conflictResolvedHere && shippingMethodForConflict !== 'cnc' && shippingMethodForConflict !== 'standard') {
-    log(`  · conflict resolution may have reset the rate — re-selecting ${shippingMethodForConflict}`);
-    await selectShippingMethod(page, log, shippingMethodForConflict);
+    const targetRe = shippingMethodTargetRe(shippingMethodForConflict);
+    const stillSelected = (await readShippingCards(page).catch(() => []))
+      .some((c) => c.checked && targetRe.test(c.text));
+    if (stillSelected) {
+      log(`  · conflict handled; ${shippingMethodForConflict} is still selected — no re-select needed`);
+    } else {
+      log(`  · conflict resolution reset the rate — re-selecting ${shippingMethodForConflict}`);
+      await selectShippingMethod(page, log, shippingMethodForConflict);
+    }
   }
 
   const continueRe = /continue\s*to\s*payment|proceed\s*to\s*payment/i;

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import * as dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import { SseBroadcaster } from './sseBroadcaster';
@@ -7,8 +8,18 @@ import { PlaywrightRunner } from './playwrightRunner';
 import { isWindows } from './procUtils';
 import type { StartOptions } from './scopeArgs';
 
-const PORT = Number(process.env.RUNNER_PORT ?? 3001);
 const ROOT = path.resolve(__dirname, '..', '..');
+// Unlike playwright.config.ts / interactive-signin.ts, nothing in the
+// runner server's own import graph used to load the root .env — so
+// STAGING_URL (read by tests/fixtures/authState.ts, imported below via
+// AuthSession) could silently stay unset here even when the Playwright
+// side had it configured. authState.ts now loads it itself too (so it's
+// correct no matter who imports it), but loading it here as well, at
+// the true process entry point, means this is never dependent on import
+// order inside this file staying the way it is today.
+dotenv.config({ path: path.join(ROOT, '.env') });
+
+const PORT = Number(process.env.RUNNER_PORT ?? 3001);
 const AUTH_FILE = path.join(ROOT, 'tests', '.auth', 'user.json');
 
 const app = express();

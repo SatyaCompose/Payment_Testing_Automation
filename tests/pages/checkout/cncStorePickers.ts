@@ -17,12 +17,16 @@ const AU_ADDRESS_RE = /\b(?:ACT|NSW|VIC|QLD|SA|WA|TAS|NT)[, ]+\d{4}\b/;
  */
 const STORE_CARD_SIGNAL_RE = /\bin\s*stock\b|\b(open|closed)\b|\bkm\b|pick ?up/i;
 
+/** Same "selection applied" summary the pre-selected-store fast path checks for. */
+const SELECTED_STORE_SUMMARY_RE = /your selected store is|selected store\s*:/i;
+
 /**
  * Fast path for the main-page CNC layout: KWH lists the 3 nearest stores
  * that already have stock (heading "There are N stores with stock close
- * to your location"). Any of those cards is safe to click — the site
+ * to your location"). Any of those cards is safe to pick — the site
  * already filtered them for stock. Returns null if the heading / cards
- * aren't visible so the caller can fall back to the drawer flow.
+ * aren't visible, or nothing could be reliably selected, so the caller
+ * can fall back to the drawer flow.
  */
 export async function pickFromMainPageStoreCards(page: Page, log: Logger): Promise<string | null> {
   const heading = page
@@ -33,11 +37,261 @@ export async function pickFromMainPageStoreCards(page: Page, log: Logger): Promi
   }
   log('  · main-page CNC store cards visible ("N stores with stock close to your location")');
 
+  // Preferred path: the list is a set of radio (or checkbox) inputs whose
+  // accessible name is the store name + address. It also re-fetches after
+  // the billing address is picked, so give it up to ~10s to settle before
+  // deciding nothing is there.
+  const controlPick = await pickMainPageStoreControl(page, log);
+  if (controlPick) return controlPick;
+
+  log('  · no radio/checkbox-shaped store control selected — falling back to generic card scan');
+  return pickMainPageStoreGenericCard(page, log);
+}
+
+type ControlKind = 'radio' | 'checkbox' | 'label';
+
+/**
+ * Locate the store list as accessible form controls. The main-page list
+ * turned out (per the form-state diagnostic) to be real radio inputs whose
+ * accessible name is the concatenated store name + address lines — not
+ * plain clickable divs — so `getByRole('radio', ...)` is the primary
+ * signal. Falls back to checkbox role, then to a `<label>` that wraps a
+ * radio/checkbox, in case a given store's markup differs.
+ */
+async function resolveMainPageStoreControls(
+  page: Page,
+  log: Logger,
+): Promise<{ kind: ControlKind; locator: Locator } | null> {
+  const shapes: Array<{ kind: ControlKind; locator: Locator }> = [
+    { kind: 'radio', locator: page.getByRole('radio', { name: AU_ADDRESS_RE }) },
+    { kind: 'checkbox', locator: page.getByRole('checkbox', { name: AU_ADDRESS_RE }) },
+    {
+      kind: 'label',
+      locator: page
+        .locator('label')
+        .filter({ hasText: AU_ADDRESS_RE })
+        .filter({ has: page.locator('input[type="radio"], input[type="checkbox"]') }),
+    },
+  ];
+  const counts = [0, 0, 0];
+  let picked: { kind: ControlKind; locator: Locator } | null = null;
+
+  // Auto-retrying poll (no manual sleeps) — bounded to ~10s so a
+  // genuinely-missing list still falls through to the drawer fallback.
+  await expect
+    .poll(
+      async () => {
+        for (let i = 0; i < shapes.length; i++) {
+          counts[i] = await shapes[i].locator.count().catch(() => 0);
+          if (counts[i] > 0 && !picked) picked = shapes[i];
+        }
+        return picked ? 1 : 0;
+      },
+      { timeout: 10_000, message: 'waiting for main-page CNC store controls to render' },
+    )
+    .toBeGreaterThan(0)
+    .catch(() => undefined);
+
+  log(
+    `  · store-control candidates — radio:${counts[0]} checkbox:${counts[1]} label:${counts[2]}`,
+  );
+  return picked;
+}
+
+/** Read the text a screen reader would announce for a store radio/checkbox. */
+async function controlLabelText(control: Locator): Promise<string> {
+  return control
+    .evaluate((el) => {
+      const closestLabel = (el.closest('label') as HTMLLabelElement | null)?.textContent?.trim();
+      if (closestLabel) return closestLabel;
+      const id = el.getAttribute('id');
+      if (id) {
+        const forLabel = document
+          .querySelector(`label[for="${CSS.escape(id)}"]`)
+          ?.textContent?.trim();
+        if (forLabel) return forLabel;
+      }
+      return (el.getAttribute('aria-label') ?? el.textContent ?? '').trim();
+    })
+    .catch(() => '');
+}
+
+/**
+ * Loose match: strip everything except letters/digits and lowercase.
+ * The candidate's label text and the "selected store" summary text never
+ * match byte-for-byte (different punctuation/whitespace, sometimes a
+ * truncated address), so comparisons below use this normalised form
+ * rather than an exact substring match.
+ */
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+/**
+ * KWH's store-radio label text is several sibling text nodes concatenated
+ * with no whitespace between them, e.g. "Majura ParkUnit 2,10 Catalina
+ * DriveMajura Park, ACT, 2609Closed" — so a lower-to-upper letter
+ * boundary is the only reliable break between "store name", "address
+ * line 1", "address line 2", "trading status". Returns the first
+ * segment, i.e. the store name.
+ */
+function extractStoreName(rawText: string): string {
+  const segments = rawText
+    .split(/(?<=[a-z0-9])(?=[A-Z])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return segments[0] ?? rawText.trim();
+}
+
+/**
+ * A click/check on the wrong node silently does nothing on this site — so
+ * a selection only counts once the app's own state reflects it: either the
+ * exact control we interacted with reports checked, or the page's "your
+ * selected store is …" summary line is visible AND names this candidate.
+ * The summary check is intentionally scoped to `candidateLabelText` —
+ * matching the generic phrase alone would also match a late-arriving
+ * default-store selection racing in from elsewhere, which is exactly the
+ * silent false pass this function exists to prevent. Returns false rather
+ * than trusting the click, so the caller falls back to the drawer instead
+ * of reporting a store that wasn't really picked.
+ */
+async function storeSelectionRegistered(
+  page: Page,
+  control: Locator | null,
+  candidateLabelText: string,
+): Promise<boolean> {
+  if (control) {
+    const checked = await control.isChecked({ timeout: 2_000 }).catch(() => false);
+    if (checked) return true;
+  }
+  const candidateName = normalizeForMatch(extractStoreName(candidateLabelText));
+  if (!candidateName) return false;
+  const summary = page.getByText(SELECTED_STORE_SUMMARY_RE).first();
+  if (!(await summary.isVisible({ timeout: 2_000 }).catch(() => false))) return false;
+  const summaryText = (await summary.textContent().catch(() => '')) ?? '';
+  return normalizeForMatch(summaryText).includes(candidateName);
+}
+
+/**
+ * A short, best-effort lookup of the visible `<label>` that owns a store
+ * control — either an ancestor `<label>`, or one wired via `for="<id>"`.
+ * Used as the fallback gesture when `.check()` doesn't register: KWH wires
+ * the actual click handler to the label text, not the sr-only input.
+ *
+ * Resolved via `evaluate` + a throwaway tag attribute (same pattern
+ * `scanAndTagInStockStores` uses below) rather than an XPath ancestor
+ * selector or a `page.locator('label').filter({ has: control })` union:
+ * `control` here is already one specific nth-selected element, and a
+ * fresh page-level `has:` filter can't safely re-derive "the same one"
+ * through that nth composition. Resolving inside `evaluate` — like
+ * `controlLabelText` above already does for text extraction — always
+ * operates on the concrete element Playwright already picked out.
+ */
+async function associatedLabel(page: Page, control: Locator): Promise<Locator | null> {
+  const TAG_ATTR = 'data-cnc-label-target';
+  const tagged = await control
+    .evaluate((el, attr) => {
+      document.querySelectorAll(`[${attr}]`).forEach((n) => n.removeAttribute(attr));
+      let label = el.closest('label') as HTMLLabelElement | null;
+      if (!label) {
+        const id = el.getAttribute('id');
+        if (id) label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      }
+      if (!label) return false;
+      label.setAttribute(attr, '1');
+      return true;
+    }, TAG_ATTR)
+    .catch(() => false);
+  if (!tagged) return null;
+  return page.locator(`[${TAG_ATTR}]`).first();
+}
+
+/**
+ * Primary path: select a store via its radio/checkbox control. KWH renders
+ * these as visually-hidden (`sr-only`) inputs — the same pattern already
+ * proven for the Click & Collect tab switch in `selectClickAndCollectTab`
+ * (see cncStore.ts) — so a bare `.check()` times out waiting for
+ * actionability that never comes; `force: true` is required. Falls back to
+ * clicking the control's associated `<label>` (same store name + address
+ * text) if the forced check still doesn't register. Timeouts are kept
+ * short (~2s) per attempt so 3 candidates never costs more than a few
+ * seconds — the drawer fallback must stay cheap to reach on genuine
+ * failure, not budget-exhausting.
+ */
+async function pickMainPageStoreControl(page: Page, log: Logger): Promise<string | null> {
+  const resolved = await resolveMainPageStoreControls(page, log);
+  if (!resolved) {
+    log('  · no radio/checkbox/label-shaped store control rendered within 10s');
+    return null;
+  }
+  const { kind, locator } = resolved;
+  const total = await locator.count().catch(() => 0);
+  log(`  · using ${kind}-shaped store controls (${total} candidate(s))`);
+
+  const seen = new Set<string>();
+  for (let i = 0; i < total; i++) {
+    const item = locator.nth(i);
+    if (!(await item.isVisible().catch(() => false))) continue;
+
+    const control = kind === 'label'
+      ? item.locator('input[type="radio"], input[type="checkbox"]').first()
+      : item;
+    const text = await controlLabelText(control);
+    if (!text) continue;
+
+    const firstLine = text.split('\n').map((s) => s.trim()).filter(Boolean)[0] ?? text.slice(0, 60);
+    // Skip shipping-mode radios ("Ship", "Click and Collect") that also
+    // happen to carry an AU address elsewhere on the page.
+    if (MODE_LABEL_RE.test(firstLine)) continue;
+    if (NOT_IN_STOCK_RE.test(text)) continue;
+    if (seen.has(firstLine)) continue;
+    seen.add(firstLine);
+
+    log(`  → selecting main-page store control "${firstLine.slice(0, 60)}" (${kind})`);
+    await control.scrollIntoViewIfNeeded().catch(() => undefined);
+
+    // sr-only input — force skips the actionability wait that never
+    // resolves for a 1x1/clipped element (matches selectClickAndCollectTab).
+    let selectedVia = 'check()';
+    let actionOk = await control
+      .check({ force: true, timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!actionOk) {
+      const label = await associatedLabel(page, control);
+      if (label) {
+        selectedVia = 'label click';
+        actionOk = await label
+          .click({ force: true, timeout: 1_500 })
+          .then(() => true)
+          .catch(() => false);
+      }
+    }
+    if (!actionOk) {
+      log(`  · check() and label click both failed on "${firstLine.slice(0, 60)}" — trying next candidate`);
+      continue;
+    }
+    if (!(await storeSelectionRegistered(page, control, text))) {
+      log(`  · selection on "${firstLine.slice(0, 60)}" (via ${selectedVia}) did not register — trying next candidate`);
+      continue;
+    }
+    log(`  ✓ selected main-page store "${firstLine.slice(0, 60)}" (${kind} control, via ${selectedVia})`);
+    return firstLine;
+  }
+  return null;
+}
+
+/**
+ * Secondary path: the original generic-card scan, kept for a layout that
+ * isn't radio/checkbox-shaped. Deepest-first so a single-store container
+ * is preferred over an ancestor wrapping multiple.
+ */
+async function pickMainPageStoreGenericCard(page: Page, log: Logger): Promise<string | null> {
   const cards = page
     .locator('li, article, section, div, button, [role="button"], label')
     .filter({ hasText: AU_ADDRESS_RE });
   const total = await cards.count().catch(() => 0);
-  log(`  · ${total} store-card candidate(s)`);
+  log(`  · ${total} generic store-card candidate(s)`);
 
   const seen = new Set<string>();
   for (let i = total - 1; i >= 0; i--) {
@@ -61,9 +315,13 @@ export async function pickFromMainPageStoreCards(page: Page, log: Logger): Promi
     seen.add(firstLine);
     // No IN_STOCK filter here — the heading guarantees all three cards
     // are in stock.
-    log(`  → clicking main-page store card "${firstLine.slice(0, 60)}"`);
+    log(`  → clicking generic store card "${firstLine.slice(0, 60)}"`);
     await card.scrollIntoViewIfNeeded().catch(() => undefined);
-    await card.click({ force: true });
+    await card.click({ force: true, timeout: 2_000 }).catch(() => undefined);
+    if (!(await storeSelectionRegistered(page, null, firstLine))) {
+      log(`  · click on "${firstLine.slice(0, 60)}" did not register — trying next candidate`);
+      continue;
+    }
     return firstLine;
   }
   return null;

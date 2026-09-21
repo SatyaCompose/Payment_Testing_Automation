@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from './BasePage';
+import { evaluateSignedIn, readCustomerState } from '../fixtures/authState';
 
 /**
  * KWH uses Kinde for auth. `openFromHeader()` clicks the account icon, which
@@ -68,26 +69,18 @@ export class LoginPage extends BasePage {
   /**
    * KWH mirrors the signed-in customer into localStorage (`customerId` /
    * `customerInfo`), which is a far more reliable signal than the header — the
-   * account icon renders for guests too.
+   * account icon renders for guests too. The rule itself lives in
+   * `tests/fixtures/authState.ts` (shared with the sign-in script,
+   * globalSetup, and the runner server — the only consumers that actually
+   * run; `tests/auth.setup.ts` uses it too but is `testIgnore`'d and never
+   * executes) so it can't drift between them.
    */
   private async isSignedIn(): Promise<boolean> {
     if (!/kitchenwarehouse\.com\.au/i.test(this.page.url())) {
       await this.goto('/');
     }
-    const state = await this.page
-      .evaluate(() => {
-        try {
-          return {
-            customerId: localStorage.getItem('customerId') ?? '',
-            customerInfo: localStorage.getItem('customerInfo') ?? '',
-          };
-        } catch {
-          return { customerId: '', customerInfo: '' };
-        }
-      })
-      .catch(() => ({ customerId: '', customerInfo: '' }));
-    const signedIn =
-      state.customerId.trim().length > 0 || /"(email|customerId|id)"\s*:/i.test(state.customerInfo);
+    const state = await readCustomerState(this.page);
+    const signedIn = evaluateSignedIn(state.customerId, state.customerInfo);
     // eslint-disable-next-line no-console
     console.log(
       `[LoginPage] signed-in check: customerId="${state.customerId.slice(0, 24)}" info=${state.customerInfo.slice(0, 40)} → ${signedIn}`,

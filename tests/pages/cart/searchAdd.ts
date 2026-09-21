@@ -1,7 +1,8 @@
 import { Page, expect } from '@playwright/test';
-import { randomKitchenSearchTerm } from '../../fixtures/testData';
+import { randomKitchenSearchTerm, ShippingMethod } from '../../fixtures/testData';
 import { handleAgeRestrictionCheckbox, Logger } from './ageRestriction';
 import { dismissInsiderOverlay, installInsiderKiller } from './insiderOverlay';
+import { pickQualifyingProductFromPlp } from './plpProductData';
 
 export type WaitForLoadingOverlay = () => Promise<void>;
 export type Goto = (path?: string) => Promise<void>;
@@ -12,6 +13,17 @@ export interface SearchAddOptions {
    *  `shipping: 'express'`) requires the picked product to be Express-eligible
    *  — i.e. available online and NOT a dropship item. */
   filterExpressOnly?: boolean;
+  /**
+   * Pick the product from the results page's embedded product-list data
+   * (see `./plpProductData.ts`) instead of a random visible card — so a
+   * product that can't actually satisfy this shipping method (no CNC
+   * store stock, no international shipping, etc.) is never added to the
+   * cart in the first place. Set by CheckoutFlow from `config.shipping`.
+   * When no product on the page qualifies, the caller's existing
+   * retry-with-a-fresh-term loop takes over rather than a silent
+   * fallback to an arbitrary product.
+   */
+  requirement?: ShippingMethod;
 }
 
 /**
@@ -84,64 +96,88 @@ async function doAddRandomProductFromSearch(
     await applyExpressDeliveryFilter(page, log, waitForOverlay);
   }
 
-  // KWH product detail pages live at `/product/<slug>` (singular).
-  // `/brands/…` are brand category listings, not products.
-  const allProductLinks = page.locator('a[href*="/product/"]');
-  const totalCount = await allProductLinks.count();
-  log(`STEP 4/6 · ${totalCount} link(s) match a[href*="/product/"]`);
-  if (opts.filterExpressOnly && totalCount === 0) {
-    throw new Error(`No products qualify for Express delivery after searching "${term}"`);
-  }
-
-  // The DOM often contains cards below the fold that are hidden until the
-  // user scrolls (lazy render). Iterate and pick the first N that report
-  // isVisible() = true, so Playwright's toBeVisible() doesn't fail on a
-  // technically-in-DOM-but-invisible card.
-  const visible: Array<{ index: number; href: string }> = [];
-  for (let i = 0; i < totalCount && visible.length < 8; i++) {
-    const l = allProductLinks.nth(i);
-    const on = await l.isVisible().catch(() => false);
-    if (on) {
-      const href = (await l.getAttribute('href').catch(() => null)) ?? '(no href)';
-      visible.push({ index: i, href });
+  let pickedLabel = '';
+  if (opts.requirement) {
+    // Data-driven pick: read the results page's own embedded product list
+    // and go straight to a product that actually satisfies this shipping
+    // method, instead of clicking a random card and discovering mid-
+    // checkout (e.g. "Product is out of stock", or a failed CNC/store
+    // scan) that it doesn't qualify. See ./plpProductData.ts.
+    log(`STEP 4/6 · picking a product via the results page's embedded data (requirement: "${opts.requirement}")`);
+    const choice = await pickQualifyingProductFromPlp(page, log, opts.requirement);
+    if (!choice) {
+      throw new Error(
+        `No product on the results page for "${term}" satisfies the "${opts.requirement}" shipping requirement — checked the page's embedded product list.`,
+      );
     }
-  }
-  log(`  → ${visible.length} visible in the top-of-page pool`);
+    log(`  ✓ picked "${choice.name}" — ${choice.reason}`);
+    pickedLabel = choice.name;
 
-  if (visible.length === 0) {
-    // Fall back: force the top card into view then retry the visibility check.
-    log('  → no visible cards, scrolling to top and retrying');
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await waitForOverlay();
+    log(`STEP 5/6 · navigating directly to ${choice.productUrl}`);
+    await goto(choice.productUrl);
+    if (!/\/product\//.test(page.url())) {
+      throw new Error(`Navigated to "${choice.productUrl}" but ended up at ${page.url()} — not a product page.`);
+    }
+  } else {
+    // KWH product detail pages live at `/product/<slug>` (singular).
+    // `/brands/…` are brand category listings, not products.
+    const allProductLinks = page.locator('a[href*="/product/"]');
+    const totalCount = await allProductLinks.count();
+    log(`STEP 4/6 · ${totalCount} link(s) match a[href*="/product/"]`);
+    if (opts.filterExpressOnly && totalCount === 0) {
+      throw new Error(`No products qualify for Express delivery after searching "${term}"`);
+    }
+
+    // The DOM often contains cards below the fold that are hidden until the
+    // user scrolls (lazy render). Iterate and pick the first N that report
+    // isVisible() = true, so Playwright's toBeVisible() doesn't fail on a
+    // technically-in-DOM-but-invisible card.
+    const visible: Array<{ index: number; href: string }> = [];
     for (let i = 0; i < totalCount && visible.length < 8; i++) {
       const l = allProductLinks.nth(i);
-      if (await l.isVisible().catch(() => false)) {
+      const on = await l.isVisible().catch(() => false);
+      if (on) {
         const href = (await l.getAttribute('href').catch(() => null)) ?? '(no href)';
         visible.push({ index: i, href });
       }
     }
-    log(`  → after scroll: ${visible.length} visible`);
+    log(`  → ${visible.length} visible in the top-of-page pool`);
+
+    if (visible.length === 0) {
+      // Fall back: force the top card into view then retry the visibility check.
+      log('  → no visible cards, scrolling to top and retrying');
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await waitForOverlay();
+      for (let i = 0; i < totalCount && visible.length < 8; i++) {
+        const l = allProductLinks.nth(i);
+        if (await l.isVisible().catch(() => false)) {
+          const href = (await l.getAttribute('href').catch(() => null)) ?? '(no href)';
+          visible.push({ index: i, href });
+        }
+      }
+      log(`  → after scroll: ${visible.length} visible`);
+    }
+
+    if (visible.length === 0) {
+      throw new Error(
+        `No visible product cards after search for "${term}". ${totalCount} link(s) present in DOM but all hidden.`,
+      );
+    }
+
+    const pick = visible[Math.floor(Math.random() * visible.length)];
+    log(`STEP 5/6 · picked product #${pick.index}  href=${pick.href}`);
+
+    const target = allProductLinks.nth(pick.index);
+    await target.scrollIntoViewIfNeeded();
+    await waitForOverlay();
+    await expect(target).toBeVisible({ timeout: 10_000 });
+    await target.click({ timeout: 20_000 });
+
+    await page.waitForURL(/\/product\//, { timeout: 30_000 }).catch(() => {
+      throw new Error(`Click did not navigate to /product/…  href was ${pick.href}, now at ${page.url()}`);
+    });
   }
-
-  if (visible.length === 0) {
-    throw new Error(
-      `No visible product cards after search for "${term}". ${totalCount} link(s) present in DOM but all hidden.`,
-    );
-  }
-
-  const pick = visible[Math.floor(Math.random() * visible.length)];
-  log(`STEP 5/6 · picked product #${pick.index}  href=${pick.href}`);
-
-  const target = allProductLinks.nth(pick.index);
-  await target.scrollIntoViewIfNeeded();
-  await waitForOverlay();
-  await expect(target).toBeVisible({ timeout: 10_000 });
-  await target.click({ timeout: 20_000 });
-
-  await page.waitForURL(/\/product\//, { timeout: 30_000 }).catch(() => {
-    throw new Error(`Click did not navigate to /product/…  href was ${pick.href}, now at ${page.url()}`);
-  });
-  log(`  → on product page: ${page.url()}`);
+  log(`  → on product page: ${page.url()}${pickedLabel ? ` ("${pickedLabel}")` : ''}`);
 
   await page.waitForLoadState('domcontentloaded');
   await waitForOverlay();

@@ -92,7 +92,17 @@ export class CheckoutFlow {
   async addProductsToCart(config: CheckoutFlowConfig): Promise<void> {
     // Express shipping requires online-available + non-dropship products.
     // The PLP "Express delivery available" filter enforces both.
-    const opts = { filterExpressOnly: config.shipping === 'express' };
+    //
+    // `requirement` additionally has the product picker read the results
+    // page's own embedded stock/shipping data and pick a product that
+    // actually satisfies this shipping method up front — e.g. ships
+    // internationally for NZ/SG, or has real Click & Collect store stock
+    // — instead of discovering mid-checkout (an out-of-stock PDP, or a
+    // CNC store scan that finds nothing) that the random pick was wrong.
+    const opts = {
+      filterExpressOnly: config.shipping === 'express',
+      requirement: config.shipping,
+    };
     // A Click & Collect order needs every line item in stock at one store, so
     // it must not inherit an earlier run's leftovers — a polluted cart makes
     // the store scan legitimately find zero in-stock stores.
@@ -184,6 +194,11 @@ export class CheckoutFlow {
       await this.checkout.pickCncBillingAddress(config.region);
       await selectCncStoreWithProductRetry(this, config, buyer);
       await this.checkout.continueToPayment('cnc');
+      // CNC is exposed to the same false pass as Express: if the conflict
+      // resolver lands on "Ship all items instead", the order silently
+      // becomes a delivery order. Cross-check the committed method here
+      // too rather than returning early.
+      await this.checkout.verifyCommittedShippingMethod('cnc');
       return;
     }
 

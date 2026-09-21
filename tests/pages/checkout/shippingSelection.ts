@@ -159,12 +159,21 @@ export async function readCommittedShippingMethod(page: Page): Promise<string> {
       aliases.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
       'i',
     );
-    // Leaf-ish nodes only: the summary line is a short standalone element,
-    // never a wrapper that also contains the address block.
-    const candidates = Array.from(document.querySelectorAll('div, span, p, li, dd, strong'))
+    // Anchored at the START of the node's text. A site-wide promo banner
+    // ("FREE standard shipping over $99") or a product badge ("Express
+    // delivery available") mentions a method mid-sentence and is short
+    // and priced, so an unanchored search returned the banner instead of
+    // the summary — which would fail a correctly-committed Express run.
+    // The committed line always leads with the method: "Standard shipping
+    // - $9.90".
+    const startsWithMethod = new RegExp(`^\\s*(?:${methodRe.source})`, 'i');
+    // Scope to the checkout column; never the header, nav or footer.
+    const root = document.querySelector('main') || document.body;
+    const candidates = Array.from(root.querySelectorAll('div, span, p, li, dd, strong'))
       .filter((el) => {
+        if (el.closest('header, nav, footer')) return false;
         const t = (el.textContent || '').trim();
-        if (!t || t.length > 80 || !methodRe.test(t)) return false;
+        if (!t || t.length > 80 || !startsWithMethod.test(t)) return false;
         return !Array.from(el.children).some((c) => methodRe.test((c.textContent || '').trim()));
       })
       .map((el) => (el.textContent || '').trim().replace(/\s+/g, ' '));
@@ -231,17 +240,6 @@ export async function verifyShippingSelection(
   const allAliases = (Object.values(shippingMethodAliases) as string[][]).flat();
   return page.evaluate(
     ({ targetText, otherLabels, targetAliases, allAliases }) => {
-      const bodyText = (document.body.innerText || '').toLowerCase();
-      const othersOnPage = otherLabels.filter((l) => bodyText.includes(l.toLowerCase()));
-      const targetOnPage = targetAliases.some((a) => bodyText.includes(a.toLowerCase()));
-      if (othersOnPage.length === 0 && targetOnPage) {
-        return {
-          ok: true,
-          selectedText: targetText,
-          reason: 'only target method visible — implicitly selected',
-        };
-      }
-
       // KWH shipping cards are <label>-wrapped sr-only checkboxes. The
       // reliable "is selected" signal is a :checked input inside a label
       // whose text contains a shipping-method name (any alias).
@@ -249,6 +247,66 @@ export async function verifyShippingSelection(
         allAliases.map((s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
         'i',
       );
+
+      // "Only the target method is offered" must be decided from the real
+      // controls, not from document.body.innerText. A page-wide substring
+      // scan counted product marketing copy ("Express delivery available")
+      // as proof the method was on offer, so a checkout that never showed
+      // an Express card could still be declared implicitly selected.
+      const controlNames = (
+        Array.from(
+          document.querySelectorAll(
+            'input[type="checkbox"], input[type="radio"], [role="radio"], [role="checkbox"]',
+          ),
+        ) as HTMLElement[]
+      )
+        .map((el) => {
+          const wrapping = el.closest('label');
+          if (wrapping && methodRe.test(wrapping.textContent || '')) return wrapping.textContent || '';
+          const aria = el.getAttribute('aria-label') || '';
+          if (methodRe.test(aria)) return aria;
+          // KWH revisions that render a bare input named by `label[for]`
+          // must be covered here too — omitting this branch left
+          // controlNames empty and silently reinstated the page-wide text
+          // scan this function was rewritten to avoid.
+          if (el.id) {
+            const forLabel = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+            const forText = forLabel?.textContent || '';
+            if (methodRe.test(forText)) return forText;
+          }
+          let node: HTMLElement | null = el.parentElement;
+          for (let hops = 0; node && hops < 5; hops += 1, node = node.parentElement) {
+            const t = node.textContent || '';
+            if (t.length < 200 && methodRe.test(t)) return t;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .map((t) => t.toLowerCase());
+
+      // Only when the page offers NO shipping controls whatsoever does
+      // reading text remain the only option — a KWH revision that renders
+      // the sole international rate as static copy. Whenever controls do
+      // exist they are the authority, so a missing Express card can no
+      // longer be papered over by page text.
+      const haystack =
+        controlNames.length > 0 ? controlNames : [(document.body.innerText || '').toLowerCase()];
+      const othersOnPage = otherLabels.filter((l) =>
+        haystack.some((n) => n.includes(l.toLowerCase())),
+      );
+      const targetOnPage = targetAliases.some((a) =>
+        haystack.some((n) => n.includes(a.toLowerCase())),
+      );
+      if (othersOnPage.length === 0 && targetOnPage) {
+        return {
+          ok: true,
+          selectedText: targetText,
+          reason:
+            controlNames.length > 0
+              ? 'only target method offered as a control — implicitly selected'
+              : 'no shipping controls rendered; only target method in page text — implicitly selected',
+        };
+      }
       const labels = Array.from(document.querySelectorAll('label')) as HTMLLabelElement[];
       const shippingLabels = labels.filter((l) => methodRe.test(l.textContent || ''));
       const checkedNames = shippingLabels
