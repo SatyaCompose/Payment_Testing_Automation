@@ -16,6 +16,7 @@ import {
 } from '../fixtures/testData';
 import { TEST_CARDS } from '../utils/testCards';
 import { selectCncStoreWithProductRetry } from './cncRetry';
+import type { DeliveryFilter } from '../pages/cart/searchAdd';
 
 export interface CheckoutFlowConfig {
   userType: UserType;
@@ -90,9 +91,21 @@ export class CheckoutFlow {
   }
 
   async addProductsToCart(config: CheckoutFlowConfig): Promise<void> {
-    // Express shipping requires online-available + non-dropship products.
-    // The PLP "Express delivery available" filter enforces both.
-    const opts = { filterExpressOnly: config.shipping === 'express' };
+    // Every KWH product-listing page offers three delivery facets, and
+    // they are the only reliable way to put a product in the cart that
+    // actually supports the shipping method this test is about to pick:
+    //   "Available Online"  → Standard shipping only
+    //   "Express delivery"  → Standard AND Express
+    //   "Click & Collect"   → in-store collection
+    // Section 2 was shipping Standard because it could land on a product
+    // the Express card was never offered for.
+    const deliveryFilterByShipping: Record<ShippingMethod, DeliveryFilter> = {
+      standard: 'available-online',
+      international: 'available-online',
+      express: 'express-delivery',
+      cnc: 'click-and-collect',
+    };
+    const opts = { deliveryFilter: deliveryFilterByShipping[config.shipping] };
     // A Click & Collect order needs every line item in stock at one store, so
     // it must not inherit an earlier run's leftovers — a polluted cart makes
     // the store scan legitimately find zero in-stock stores.

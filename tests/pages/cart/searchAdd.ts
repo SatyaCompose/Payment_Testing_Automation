@@ -6,18 +6,55 @@ import { dismissInsiderOverlay, installInsiderKiller } from './insiderOverlay';
 export type WaitForLoadingOverlay = () => Promise<void>;
 export type Goto = (path?: string) => Promise<void>;
 
+/**
+ * The three delivery facets every KWH product-listing page offers. They
+ * are the ONLY reliable way to put a product in the cart that supports
+ * the shipping method a test is about to ask for:
+ *
+ *   available-online   → product ships, but Standard shipping only
+ *   express-delivery   → product supports BOTH Standard and Express
+ *   click-and-collect  → product can be collected in store (CNC)
+ *
+ * Picking an unfiltered product is what made section 2 (Express) place
+ * its orders on Standard shipping: the checkout simply never offered an
+ * Express card for a dropship item, and the suite carried on regardless.
+ */
+export type DeliveryFilter = 'available-online' | 'express-delivery' | 'click-and-collect';
+
+interface DeliveryFacet {
+  label: string;
+  re: RegExp;
+  /** Throw when the facet can't be applied, instead of continuing unfiltered. */
+  required: boolean;
+}
+
+const DELIVERY_FACETS: Record<DeliveryFilter, DeliveryFacet> = {
+  // Standard / international runs worked before any filtering existed, so
+  // this one warns rather than throws — a missing facet must not turn a
+  // currently-green section red.
+  'available-online': { label: 'Available Online', re: /available\s*online/i, required: false },
+  // Express and CNC genuinely depend on product eligibility: without the
+  // facet the checkout won't offer the method at all, so a failure here
+  // must surface (the caller then retries with a fresh search term).
+  'express-delivery': { label: 'Express delivery', re: /express\s*delivery(\s*available)?/i, required: true },
+  'click-and-collect': {
+    label: 'Click & Collect',
+    re: /click\s*(&|and)\s*collect/i,
+    required: true,
+  },
+};
+
 export interface SearchAddOptions {
-  /** Filter the PLP to only products that qualify for Express shipping
-   *  before picking one. Set when the caller (typically CheckoutFlow with
-   *  `shipping: 'express'`) requires the picked product to be Express-eligible
-   *  — i.e. available online and NOT a dropship item. */
-  filterExpressOnly?: boolean;
+  /** Which PLP delivery facet to apply before picking a product, so the
+   *  product supports the shipping method the test will select at
+   *  checkout. Omit to search unfiltered. */
+  deliveryFilter?: DeliveryFilter;
 }
 
 /**
  * Attempts up to `maxAttempts` random searches; if a picked product turns
- * out to be out-of-stock (or, with `filterExpressOnly`, no product on the
- * PLP survives the Express filter), retries with a fresh search term.
+ * out to be out-of-stock (or no product on the PLP survives the requested
+ * delivery facet), retries with a fresh search term.
  */
 export async function addRandomProductFromSearch(
   page: Page,
@@ -80,8 +117,8 @@ async function doAddRandomProductFromSearch(
   await dismissInsiderOverlay(page, log);
   log(`  → results URL: ${page.url()}`);
 
-  if (opts.filterExpressOnly) {
-    await applyExpressDeliveryFilter(page, log, waitForOverlay);
+  if (opts.deliveryFilter) {
+    await applyDeliveryFilter(page, log, waitForOverlay, opts.deliveryFilter);
   }
 
   // KWH product detail pages live at `/product/<slug>` (singular).
@@ -89,8 +126,11 @@ async function doAddRandomProductFromSearch(
   const allProductLinks = page.locator('a[href*="/product/"]');
   const totalCount = await allProductLinks.count();
   log(`STEP 4/6 · ${totalCount} link(s) match a[href*="/product/"]`);
-  if (opts.filterExpressOnly && totalCount === 0) {
-    throw new Error(`No products qualify for Express delivery after searching "${term}"`);
+  if (opts.deliveryFilter && totalCount === 0) {
+    throw new Error(
+      `No products left after applying the "${DELIVERY_FACETS[opts.deliveryFilter].label}" ` +
+        `filter to a search for "${term}"`,
+    );
   }
 
   // The DOM often contains cards below the fold that are hidden until the
@@ -262,31 +302,41 @@ async function doAddRandomProductFromSearch(
 }
 
 /**
- * Clicks the "Express delivery available" facet on the search results page
- * so subsequent product picks are guaranteed to be online-available AND
- * not dropship items — the two conditions the KWH Express shipping method
- * requires. Waits for the PLP to re-render before returning.
+ * Clicks one of the three PLP delivery facets so every subsequent product
+ * pick is guaranteed to support the shipping method the test will choose
+ * at checkout. Confirms the facet really engaged before returning — a
+ * blind click here is how an ineligible product reached the cart and made
+ * the Express run fall back to Standard shipping.
  */
-async function applyExpressDeliveryFilter(
+async function applyDeliveryFilter(
   page: Page,
   log: Logger,
   waitForOverlay: WaitForLoadingOverlay,
+  which: DeliveryFilter,
 ): Promise<void> {
-  log('  → applying "Express delivery available" filter (Express-only run)');
-  // KWH renders the facet in both a desktop sidebar AND a hidden mobile
+  const facet = DELIVERY_FACETS[which];
+  log(`  → applying "${facet.label}" PLP filter`);
+
+  const fail = (msg: string): void => {
+    if (facet.required) throw new Error(msg);
+    log(`  ! ${msg} — continuing unfiltered (facet is advisory for this shipping method)`);
+  };
+
+  // KWH renders the facets in both a desktop sidebar AND a hidden mobile
   // drawer; a raw `.first()` picks the drawer copy and fails on click.
   // Scope to the visible one, and require it to OWN a checkbox — product
-  // cards carry an "Express delivery available" badge too, and an <a>
-  // match there navigated to the product page instead of filtering.
+  // cards carry the same wording as a badge, and matching an <a> there
+  // navigated to the product page instead of filtering the list.
   const facetControl = 'input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]';
   const filter = page
     .locator('label, button, [role="button"], [role="checkbox"]')
-    .filter({ hasText: /express\s*delivery\s*available/i })
+    .filter({ hasText: facet.re })
     .filter({ has: page.locator(facetControl) })
     .filter({ visible: true })
     .first();
   if (!(await filter.count().catch(() => 0))) {
-    throw new Error('No "Express delivery available" filter facet on the results page');
+    fail(`No "${facet.label}" filter facet on the results page`);
+    return;
   }
   await filter.scrollIntoViewIfNeeded().catch(() => undefined);
 
@@ -298,38 +348,38 @@ async function applyExpressDeliveryFilter(
   await filter.click();
   await waitForOverlay();
 
-  // Confirm the facet actually engaged. A blind click here is what let an
-  // unfiltered (possibly dropship) product into the cart, which in turn
-  // meant Express was never offered at checkout. Accept any one of:
-  // the facet's control reporting checked, the URL gaining facet state,
-  // or the result count changing.
+  // Confirm the facet actually engaged. Accept any one of: its control
+  // reporting checked, the URL gaining facet state, or the result count
+  // changing.
   const input = filter.locator(facetControl).first();
   const applied = await page
     .waitForFunction(
-      ({ before, prevUrl }: { before: number; prevUrl: string }) => {
+      ({ before, prevUrl, pattern }: { before: number; prevUrl: string; pattern: string }) => {
+        const re = new RegExp(pattern, 'i');
         const boxes = Array.from(
           document.querySelectorAll('input[type="checkbox"], input[type="radio"]'),
         ) as HTMLInputElement[];
         const facetChecked = boxes.some((b) => {
           const name = b.closest('label')?.textContent || b.getAttribute('aria-label') || '';
-          return /express\s*delivery\s*available/i.test(name) && b.checked;
+          return re.test(name) && b.checked;
         });
         const urlChanged = window.location.href !== prevUrl;
         const countChanged = document.querySelectorAll('a[href*="/product/"]').length !== before;
         return facetChecked || urlChanged || countChanged;
       },
-      { before: countBefore, prevUrl: urlBefore },
+      { before: countBefore, prevUrl: urlBefore, pattern: facet.re.source },
       { timeout: 10_000, polling: 300 },
     )
     .then(() => true)
     .catch(() => false);
 
   if (!applied) {
-    throw new Error(
-      'Clicked the "Express delivery available" facet but the results did not change ' +
-        '— the filter never applied, so the picked product may not be Express-eligible.',
+    fail(
+      `Clicked the "${facet.label}" facet but the results did not change — the filter ` +
+        `never applied, so the picked product may not support the requested shipping method`,
     );
+    return;
   }
   const checkedNow = await input.isChecked().catch(() => false);
-  log(`  ✓ Express filter applied (facet checked: ${checkedNow})`);
+  log(`  ✓ "${facet.label}" filter applied (facet checked: ${checkedNow})`);
 }
