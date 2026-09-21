@@ -178,10 +178,13 @@ async function main() {
   const LOGIN_URL =
     `${STAGING_URL}/api/auth/login` +
     `?post_login_redirect_url=${encodeURIComponent(`${STAGING_URL}/`)}`;
-  console.log('👤 Step 2 — sign into Kitchen Warehouse in the window that just opened.');
-  console.log('   Use "Continue with Google" — it is the only route that works unattended.');
-  console.log('   Email + password does NOT use the password: it emails a one-time code,');
-  console.log('   which this script cannot read for you.');
+  console.log('👤 Step 2 — sign into Kitchen Warehouse in the browser window.');
+  console.log('   "Continue with Google" is the quickest route.');
+  if (SKIP_GOOGLE) {
+    console.log('   You skipped step 1, so Google will ask you to sign in first.');
+  }
+  console.log('   Email is slower: it does NOT use your password — it emails a');
+  console.log('   one-time code you would have to fetch from the inbox yourself.');
   await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' });
 
   const waitResult = await waitForSignedIn(page, MANUAL_TIMEOUT_MS);

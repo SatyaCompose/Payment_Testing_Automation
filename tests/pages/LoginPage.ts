@@ -3,16 +3,30 @@ import { BasePage } from './BasePage';
 import { evaluateSignedIn, readCustomerState } from '../fixtures/authState';
 
 /**
- * KWH uses Kinde for auth. `openFromHeader()` clicks the account icon, which
- * redirects to Kinde. `login()` fills the Kinde form.
+ * KWH uses Kinde for auth, hosted at `/api/auth/login`.
+ *
+ * `open()` goes straight there. `/Account` is NOT a login page: a
+ * signed-out visitor is silently redirected to the storefront home page
+ * (observed live on staging), so navigating there leaves you with no form
+ * and no error. `openFromHeader()` drives the header's hover-only account
+ * menu instead.
+ *
+ * `login()` is effectively dead — the Kinde email route answers with a
+ * one-time code emailed to the address, never a password field. See its
+ * own comment.
  */
 export class LoginPage extends BasePage {
   constructor(page: Page) {
     super(page);
   }
 
+  /** Kinde's hosted sign-in, returning to the site root once complete. */
   async open(): Promise<void> {
-    await this.goto('/Account');
+    const base = this.page.url().startsWith('http')
+      ? new URL(this.page.url()).origin
+      : '';
+    const target = encodeURIComponent(`${base}/`);
+    await this.goto(`/api/auth/login?post_login_redirect_url=${target}`);
   }
 
   /**
@@ -21,10 +35,21 @@ export class LoginPage extends BasePage {
    * used to retry against a permanently disabled element and never leave
    * the page. Hover it, then click the "Log in to manage your account"
    * item it reveals (which points at the Kinde `/api/auth/login` route).
+   *
+   * Desktop only — a hover has no meaning on the mobile-safari /
+   * android-chrome projects. Use `open()` there, which reaches the same
+   * Kinde route directly.
+   *
+   * The accessible name is exactly "Account"; matched with `exact` so it
+   * cannot also catch "Create an account" / "My account". Both locators
+   * take `.first()` because the header ships duplicate desktop + mobile
+   * markup, and a bare match would trip strict mode rather than click.
    */
   async openFromHeader(): Promise<void> {
-    await this.page.getByRole('button', { name: /account/i }).first().hover();
-    const loginLink = this.page.getByRole('link', { name: /log in to manage your account/i });
+    await this.page.getByRole('button', { name: 'Account', exact: true }).first().hover();
+    const loginLink = this.page
+      .getByRole('link', { name: /log in to manage your account/i })
+      .first();
     await expect(loginLink).toBeVisible();
     await loginLink.click();
   }
