@@ -44,6 +44,62 @@ function signInContextOptions() {
   };
 }
 
+/**
+ * Matches a URL Google only serves to an already-authenticated browser
+ * (the myaccount app, the post-signin account-chooser redirect, or the
+ * localized google.com landing). Used both to decide when the manual
+ * Google wait in Step 1 has succeeded, and — before that wait even starts
+ * — to detect that a seeded `storageState` already carries a live Google
+ * session, so the wait can be skipped instead of duplicated.
+ */
+const GOOGLE_SIGNED_IN_URL_PATTERN =
+  /myaccount\.google\.com|accounts\.google\.com\/b\/0\/|google\.com\/intl\//i;
+
+/**
+ * Paths Google serves while it still wants something from the human — its
+ * sign-in form, a challenge/2FA step, an account chooser, an OAuth consent
+ * screen. `accounts.google.com/b/0/` alone is too loose to mean "signed
+ * in": several of these live under URL shapes that would otherwise match
+ * it, which would make us announce "already signed into Google" and skip a
+ * step the operator still had to complete, and simultaneously fail to
+ * notice they were stuck — reproducing the exact silent stall this file
+ * exists to prevent. Checked FIRST, so it always wins over the
+ * signed-in patterns above.
+ */
+const GOOGLE_PENDING_PATH_PATTERN =
+  /\/(signin|challenge|accountchooser|oauth2|consent|speedbump|deniedsigninrejected)/i;
+
+/**
+ * True when the browser is sitting on one of Google's own accounts.google.com
+ * pages (its login form, 2FA challenge, etc.) rather than having completed
+ * the sign-in flow. Several distinct states land here — an expired saved
+ * session, a never-signed-in profile, an account chooser when the profile
+ * holds more than one Google account, a consent screen, a 2FA challenge —
+ * and this predicate cannot tell them apart. It means only "Google stopped
+ * the redirect and wants something from the human", so messaging built on
+ * it must say that and never diagnose a specific cause. Deliberately the
+ * inverse of
+ * `GOOGLE_SIGNED_IN_URL_PATTERN` restricted to the accounts.google.com host,
+ * so the two never both report true for the same URL.
+ */
+function isOnGoogleLoginPage(url: string): boolean {
+  if (!/accounts\.google\.com/i.test(url)) return false;
+  // A pending path wins outright — some of them sit under URL shapes the
+  // signed-in patterns would otherwise match.
+  if (GOOGLE_PENDING_PATH_PATTERN.test(url)) return true;
+  return !GOOGLE_SIGNED_IN_URL_PATTERN.test(url);
+}
+
+/**
+ * True only when Google has genuinely finished with the human. The pending
+ * check is applied here too, so a URL that merely looks like a signed-in
+ * shape but is really a chooser/challenge never counts as done.
+ */
+function isGoogleSignedIn(url: string): boolean {
+  if (GOOGLE_PENDING_PATH_PATTERN.test(url)) return false;
+  return GOOGLE_SIGNED_IN_URL_PATTERN.test(url);
+}
+
 /** True if `err` looks like Playwright's "target already closed" error text — a backstop, not the primary signal (that's `page.isClosed()`). */
 function isTargetClosedError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -75,13 +131,29 @@ type SignInWaitResult = 'signed-in' | 'timeout' | 'closed';
  * `page.isClosed()`, with the error-text match as a backstop for the
  * moment right after closure before `isClosed()` reflects it) and stop
  * immediately instead of treating it as a retryable timeout.
+ *
+ * `onProgress`, if given, is called at most once — the first loop
+ * iteration at or past the halfway point of `timeoutMs` — with the
+ * elapsed time and the page's current URL. It exists purely to give the
+ * operator one confirmation partway through a long silent wait that the
+ * script is still watching (and what it's watching); it never affects
+ * the deadline or the eventual result.
  */
-export async function waitForSignedIn(page: import('@playwright/test').Page, timeoutMs: number): Promise<SignInWaitResult> {
+export async function waitForSignedIn(
+  page: import('@playwright/test').Page,
+  timeoutMs: number,
+  onProgress?: (info: { elapsedMs: number; url: string }) => void,
+): Promise<SignInWaitResult> {
   const deadline = Date.now() + timeoutMs;
   const sliceMs = 15_000;
+  let progressReported = false;
   while (Date.now() < deadline) {
     if (page.isClosed()) return 'closed';
     const remaining = deadline - Date.now();
+    if (onProgress && !progressReported && timeoutMs - remaining >= timeoutMs / 2) {
+      progressReported = true;
+      onProgress({ elapsedMs: timeoutMs - remaining, url: page.url() });
+    }
     try {
       // `page.waitForFunction` is a THREE-parameter call —
       // (pageFunction, arg, options) — not two. The predicate below takes
@@ -123,7 +195,16 @@ export async function waitForSignedIn(page: import('@playwright/test').Page, tim
 async function main() {
   console.log('\n=== KWH Payments · Manual Sign-in ===\n');
   console.log('A real Chrome window is opening. Sign in as you normally would.');
-  console.log('This script will detect the login and save the session automatically.\n');
+  console.log('This script will detect the login and save the session automatically.');
+
+  const seededFromExistingSession = fs.existsSync(AUTH_FILE);
+  if (seededFromExistingSession) {
+    console.log('A previously saved session was found and its Google cookies will be');
+    console.log('reused, which can skip the Google step entirely. Nothing is overwritten');
+    console.log('until a fresh sign-in is confirmed.\n');
+  } else {
+    console.log('No previously saved session was found — this will be a full manual sign-in.\n');
+  }
 
   const contextOptions = signInContextOptions();
 
@@ -137,7 +218,19 @@ async function main() {
     return chromium.launch({ headless: false, args: ['--disable-blink-features=AutomationControlled'] });
   });
 
-  const context = await browser.newContext(contextOptions);
+  // Seed the new context from any existing saved session (computed above).
+  // Its Google cookies are what let "Continue with Google" on the KWH
+  // login page complete with no prompt at all (proven live against
+  // staging) instead of forcing a full Google sign-in every run. Carrying
+  // over a stale *guest* KWH session from the same file is harmless: a
+  // successful sign-in below fully replaces the file's contents (see the
+  // re-verify + write step at the end), and a failed attempt never writes
+  // at all — so seeding here cannot turn a good saved session into a bad
+  // one, it can only save a fresh sign-in faster. A first-ever run has no
+  // file yet, so this is conditional rather than always-on.
+  const context = await browser.newContext(
+    seededFromExistingSession ? { ...contextOptions, storageState: AUTH_FILE } : contextOptions,
+  );
   const page = await context.newPage();
 
   // ---------- Step 1: Google (optional, non-fatal) ----------
@@ -149,21 +242,40 @@ async function main() {
   if (SKIP_GOOGLE) {
     console.log('👤 Step 1 — skipped (SIGNIN_SKIP_GOOGLE=1).\n');
   } else {
-    console.log('👤 Step 1 — sign into your Google account… (optional — you can skip this window)');
+    console.log('👤 Step 1 — checking Google sign-in status…');
     await page.goto('https://accounts.google.com/signin', { waitUntil: 'domcontentloaded' });
-    try {
-      await page.waitForURL(
-        (url) =>
-          /myaccount\.google\.com|accounts\.google\.com\/b\/0\/|google\.com\/intl\//i.test(url.href),
-        { timeout: MANUAL_TIMEOUT_MS },
+    // If the seeded session already carries a live Google session,
+    // accounts.google.com redirects away from /signin immediately —
+    // no need to sit through the manual wait below for something that's
+    // already true.
+    if (seededFromExistingSession && isGoogleSignedIn(page.url())) {
+      console.log('✓ Step 1 — the saved session is already signed into Google — skipping the wait.\n');
+    } else {
+      console.log(
+        '   Sign into your Google account in the window now.\n' +
+        '   This step is skippable, but if Google is not signed in here and you\n' +
+        '   skip it, Step 2\'s "Continue with Google" click will very likely land\n' +
+        '   you back on this same Google page and then wait the full 10 minutes\n' +
+        '   for it — signing in here now avoids that. If you\n' +
+        '   would rather not sign in to Google at all, Step 2 also offers a\n' +
+        '   slower email one-time-code route that does not need it.',
       );
-      console.log('✓ Google sign-in detected.\n');
-    } catch {
-      console.warn(
-        '⚠ Did not detect a completed Google sign-in in time — continuing anyway.\n' +
-        '  (Google Pay / Google SSO tests may not work until you sign in to Google\n' +
-        '  and re-run this script. Set SIGNIN_SKIP_GOOGLE=1 to skip this step next time.)\n',
-      );
+      try {
+        await page.waitForURL((url) => isGoogleSignedIn(url.href), {
+          timeout: MANUAL_TIMEOUT_MS,
+        });
+        console.log('✓ Google sign-in detected.\n');
+      } catch {
+        console.warn(
+          '⚠ Did not detect a completed Google sign-in in time — continuing anyway.\n' +
+          '  With Google not signed in here, Step 2\'s "Continue with Google" click\n' +
+          '  will very likely stall on a Google page waiting for you.\n' +
+          '  When that happens, sign in to Google in the window that is open and\n' +
+          '  the rest will finish automatically — or use the slower email\n' +
+          '  one-time-code option in Step 2 instead. Set SIGNIN_SKIP_GOOGLE=1 to\n' +
+          '  skip this step next time.\n',
+        );
+      }
     }
   }
 
@@ -179,15 +291,77 @@ async function main() {
     `${STAGING_URL}/api/auth/login` +
     `?post_login_redirect_url=${encodeURIComponent(`${STAGING_URL}/`)}`;
   console.log('👤 Step 2 — sign into Kitchen Warehouse in the browser window.');
-  console.log('   "Continue with Google" is the quickest route.');
+  console.log('   "Continue with Google" is the quickest route — this script will try');
+  console.log('   clicking it for you; if that does not work, click it yourself.');
   if (SKIP_GOOGLE) {
-    console.log('   You skipped step 1, so Google will ask you to sign in first.');
+    console.log('   You skipped step 1, so Google may ask you to sign in first.');
   }
   console.log('   Email is slower: it does NOT use your password — it emails a');
   console.log('   one-time code you would have to fetch from the inbox yourself.');
   await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' });
 
-  const waitResult = await waitForSignedIn(page, MANUAL_TIMEOUT_MS);
+  // Accelerator only, never a hard dependency: if "Continue with Google" is
+  // on screen, click it — the seeded Google cookies (when present) let this
+  // complete with no prompt at all. If it isn't there, or the click fails
+  // for any reason, log it and fall straight through to the same manual
+  // wait below exactly as if this block didn't exist — the human still has
+  // the full 10-minute window to finish sign-in by hand.
+  try {
+    const continueWithGoogle = page.getByRole('button', { name: 'Continue with Google', exact: true });
+    // `isVisible()` does NOT wait — it samples the DOM the instant it is
+    // called, which here is immediately after `goto`, before this
+    // client-rendered button has had a chance to mount. It would report
+    // false almost every time and silently drop us back to "click it
+    // yourself", defeating the accelerator. `waitFor` is the waiting form.
+    const googleButtonReady = await continueWithGoogle
+      .waitFor({ state: 'visible', timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (googleButtonReady) {
+      console.log('   Found "Continue with Google" — clicking it automatically…');
+      await continueWithGoogle.click();
+      console.log('   Clicked. Waiting for sign-in to complete…');
+
+      // The click either completes the flow and returns to the store, or
+      // Google stops the redirect and parks the browser on one of its own
+      // pages, wanting something from the human first. Check
+      // for that second case right away instead of only finding out ten
+      // minutes from now. This is a notification only: whether or not it
+      // fires, the full wait below still runs for its complete duration —
+      // the human may already be sitting at that exact page about to sign in.
+      const landedOnGoogleLoginPage = await page
+        .waitForURL((url) => isOnGoogleLoginPage(url.href), { timeout: 8_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (landedOnGoogleLoginPage) {
+        console.log(
+          '\n' +
+          '   ══════════════════════════════════════════════════════════════\n' +
+          '   ⚠  Google is waiting on you.\n' +
+          '   The browser is sitting on a Google page instead of returning to\n' +
+          '   the store — usually a sign-in prompt, sometimes an account chooser\n' +
+          '   or a confirmation step.\n' +
+          '   Sign in to Google in the window that is open now — the rest of\n' +
+          '   this script will continue automatically once you do.\n' +
+          '   ══════════════════════════════════════════════════════════════\n',
+        );
+      }
+    } else {
+      console.log('   "Continue with Google" was not visible — continue manually.');
+    }
+  } catch (err) {
+    console.log(
+      `   Auto-click of "Continue with Google" failed (${err instanceof Error ? err.message.split('\n')[0] : String(err)}) — continue manually.`,
+    );
+  }
+
+  const waitResult = await waitForSignedIn(page, MANUAL_TIMEOUT_MS, ({ elapsedMs, url }) => {
+    const minutes = Math.round(elapsedMs / 60_000);
+    const where = isOnGoogleLoginPage(url)
+      ? 'a Google page waiting on you — finish what it asks to continue'
+      : 'the Kitchen Warehouse sign-in flow';
+    console.log(`   …still waiting (${minutes} min elapsed) — the window is currently on ${where}.`);
+  });
   if (waitResult === 'closed') {
     // Only the tracked page/context is confirmed gone — the browser
     // process itself may still be alive (e.g. the operator closed just
@@ -204,12 +378,26 @@ async function main() {
     process.exit(1);
   }
   if (waitResult === 'timeout') {
+    // Report specifically that sign-in stalled at Google, rather than the
+    // generic message below, when the browser is currently sitting on
+    // one of Google's own pages, which is the most likely reason ten
+    // minutes passed with nothing detected. Report what is on screen, not
+    // a guess at why — see isOnGoogleLoginPage's note on the several
+    // states that look identical from here.
+    const stalledAtGoogleLogin = isOnGoogleLoginPage(page.url());
     console.error(
-      '\n❌ Sign-in was not detected within 10 minutes.\n' +
-      '   Nothing was saved — any previously saved session is untouched.\n' +
-      '   Please run this again and make sure you finish signing in to KWH\n' +
-      '   (you should see your account/orders page, not a login form) before\n' +
-      '   the timeout.\n',
+      stalledAtGoogleLogin
+        ? '\n❌ Sign-in stalled on a Google page and was not detected within 10\n' +
+          '   minutes — Google was waiting on something (a sign-in, an account\n' +
+          '   choice, or a confirmation) and it was never completed.\n' +
+          '   Nothing was saved — any previously saved session is untouched.\n' +
+          '   Run this again, finish whatever Google asks in the window, and the\n' +
+          '   rest completes automatically.\n'
+        : '\n❌ Sign-in was not detected within 10 minutes.\n' +
+          '   Nothing was saved — any previously saved session is untouched.\n' +
+          '   Please run this again and make sure you finish signing in to KWH\n' +
+          '   (you should see your account/orders page, not a login form) before\n' +
+          '   the timeout.\n',
     );
     // Best-effort, matching the 'closed' branch above — the browser is
     // normally still alive here, but guarding it the same way keeps both
