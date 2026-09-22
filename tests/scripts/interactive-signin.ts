@@ -52,22 +52,58 @@ function signInContextOptions() {
  * — to detect that a seeded `storageState` already carries a live Google
  * session, so the wait can be skipped instead of duplicated.
  */
+// `/b/<n>/` is Google's account-slot scheme, and the slot is NOT always 0 —
+// a profile that has accumulated several Google accounts can land on /b/1/
+// or higher. Matching only /b/0/ made a genuinely-complete sign-in read as
+// unfinished, burning the whole 10-minute window and then reporting a
+// stall that had not happened.
+//
+// The `/intl/<locale>/` branch is anchored to the bare google.com host on
+// purpose. Unanchored it also matched `accounts.google.com/intl/en/
+// ServiceLogin` — Google's actual credential prompt — which would have had
+// us announce "✓ Google sign-in detected" while the operator was still
+// staring at an empty login form.
 const GOOGLE_SIGNED_IN_URL_PATTERN =
-  /myaccount\.google\.com|accounts\.google\.com\/b\/0\/|google\.com\/intl\//i;
+  /myaccount\.google\.com|accounts\.google\.com\/b\/\d+\/|^https?:\/\/(www\.)?google\.com\/intl\//i;
 
 /**
  * Paths Google serves while it still wants something from the human — its
  * sign-in form, a challenge/2FA step, an account chooser, an OAuth consent
- * screen. `accounts.google.com/b/0/` alone is too loose to mean "signed
- * in": several of these live under URL shapes that would otherwise match
- * it, which would make us announce "already signed into Google" and skip a
- * step the operator still had to complete, and simultaneously fail to
- * notice they were stuck — reproducing the exact silent stall this file
- * exists to prevent. Checked FIRST, so it always wins over the
- * signed-in patterns above.
+ * screen. A signed-in-looking host or slot alone is too loose to mean
+ * "signed in": several of these live under URL shapes the patterns above
+ * would otherwise match, which would make us announce "already signed into
+ * Google" and skip a step the operator still had to complete, and
+ * simultaneously fail to notice they were stuck — reproducing the exact
+ * silent stall this file exists to prevent. Checked FIRST, so it always
+ * wins over the signed-in patterns above.
  */
 const GOOGLE_PENDING_PATH_PATTERN =
-  /\/(signin|challenge|accountchooser|oauth2|consent|speedbump|deniedsigninrejected)/i;
+  /\/(signin|servicelogin|challenge|accountchooser|oauth2|consent|speedbump|deniedsigninrejected)/i;
+
+/**
+ * Origin + path only, with the query string and fragment dropped.
+ *
+ * Every pattern below must be tested against this, never the raw href: a
+ * Google URL routinely carries a `continue=` parameter holding another
+ * URL-encoded Google address, so matching the whole string lets the
+ * *destination* decide the classification. Measured case —
+ * `accounts.google.com/RotateCookiesPage?continue=https%3A%2F%2F
+ * myaccount.google.com%2Fintro` read as "already signed in" purely because
+ * `myaccount.google.com` appeared inside the parameter, reopening the same
+ * false-positive this pair of predicates exists to close.
+ *
+ * Falls back to the raw string if `URL` cannot parse it — a value we
+ * cannot parse is one we should not confidently classify, and both callers
+ * treat "no match" as the safe answer.
+ */
+function matchableUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
 
 /**
  * True when the browser is sitting on one of Google's own accounts.google.com
@@ -83,11 +119,12 @@ const GOOGLE_PENDING_PATH_PATTERN =
  * so the two never both report true for the same URL.
  */
 function isOnGoogleLoginPage(url: string): boolean {
-  if (!/accounts\.google\.com/i.test(url)) return false;
+  const target = matchableUrl(url);
+  if (!/accounts\.google\.com/i.test(target)) return false;
   // A pending path wins outright — some of them sit under URL shapes the
   // signed-in patterns would otherwise match.
-  if (GOOGLE_PENDING_PATH_PATTERN.test(url)) return true;
-  return !GOOGLE_SIGNED_IN_URL_PATTERN.test(url);
+  if (GOOGLE_PENDING_PATH_PATTERN.test(target)) return true;
+  return !GOOGLE_SIGNED_IN_URL_PATTERN.test(target);
 }
 
 /**
@@ -96,8 +133,9 @@ function isOnGoogleLoginPage(url: string): boolean {
  * shape but is really a chooser/challenge never counts as done.
  */
 function isGoogleSignedIn(url: string): boolean {
-  if (GOOGLE_PENDING_PATH_PATTERN.test(url)) return false;
-  return GOOGLE_SIGNED_IN_URL_PATTERN.test(url);
+  const target = matchableUrl(url);
+  if (GOOGLE_PENDING_PATH_PATTERN.test(target)) return false;
+  return GOOGLE_SIGNED_IN_URL_PATTERN.test(target);
 }
 
 /** True if `err` looks like Playwright's "target already closed" error text — a backstop, not the primary signal (that's `page.isClosed()`). */
