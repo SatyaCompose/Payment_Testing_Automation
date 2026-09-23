@@ -50,6 +50,15 @@ you", never a password field — so there is no email/password login on Kinde.
 
 Sign-in (`npm run auth:setup`) is a manual step — a real Chrome window opens and you complete it yourself; it is not scripted. The session is saved only once sign-in genuinely completes — a failed or abandoned attempt leaves any previously saved session untouched, and a run will fail closed with a clear message rather than silently testing as a guest.
 
+**Sign into Google *inside the window the script opens*.** The script keeps its
+own session in `tests/.auth/user.json` and never reads your everyday Chrome
+profile, so signing into Google normally has no effect on it. The saved Google
+cookies can be present and years from expiry while Google still reports the
+account as *signed out* — the account chooser then shows it greyed out, Step 2's
+"Continue with Google" click parks on that chooser, and the run times out. Step 1
+exists precisely to re-establish that Google session; do not skip it unless you
+know Google is live in the script's own window.
+
 Provider-specific creds (PayPal, Afterpay, Apple Pay) live in their own env vars. See `.env.example`.
 
 ## Addresses
