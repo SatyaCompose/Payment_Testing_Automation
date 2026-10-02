@@ -104,6 +104,14 @@ async function doAddRandomProductFromSearch(
     // checkout (e.g. "Product is out of stock", or a failed CNC/store
     // scan) that it doesn't qualify. See ./plpProductData.ts.
     log(`STEP 4/6 · picking a product via the results page's embedded data (requirement: "${opts.requirement}")`);
+    // The typed search is a Next.js client-side navigation, which leaves
+    // `#__NEXT_DATA__` holding the HOME page's payload — no productList in
+    // it (confirmed live: typed search → none; same URL reloaded → 32).
+    // A hard reload of the results URL re-renders server-side with the
+    // search (and any facet) params, so the embedded list matches the page.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForOverlay();
+    await dismissInsiderOverlay(page, log);
     const choice = await pickQualifyingProductFromPlp(page, log, opts.requirement);
     if (!choice) {
       throw new Error(

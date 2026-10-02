@@ -207,8 +207,19 @@ export async function handleLoginPromptIfPresent(
     log(`  · native click failed: ${err.message?.split('\n')[0]}`);
   });
 
-  // 3. Wait for the Kinde login page (URL change, Google button, or popup).
+  // 3. Wait for the Kinde login page (URL change, Google button, or popup)
+  //    — or for the silent round-trip. A live Kinde session (seeded from
+  //    tests/.auth/user.json) makes the Log in click bounce
+  //    /api/auth/login → Kinde → straight back to /checkout?code=… with no
+  //    Kinde page ever painted; the intermediate URLs flash by too fast
+  //    for waitForURL to catch, so the landing URL has to count too.
+  //    Without it this read as "did not open Kinde", the fallback
+  //    re-clicked, and 1.1 died on a sign-in that had already succeeded
+  //    (seen live on android-chrome).
   const outcome = await Promise.race([
+    page.waitForURL(SILENT_SSO_RETURN_URL, { timeout: 8_000 })
+      .then(() => 'silent-sso' as const)
+      .catch(() => null),
     page.waitForURL(/kinde\.com|\/api\/auth|\/(login|signin)/i, { timeout: 8_000 })
       .then(() => 'url-changed' as const)
       .catch(() => null),
@@ -217,6 +228,12 @@ export async function handleLoginPromptIfPresent(
       .catch(() => null),
     popupPromise.then((p) => (p ? 'popup' : null)),
   ]);
+
+  if (outcome === 'silent-sso') {
+    log('  → Kinde session was live: silent SSO round-trip landed back on /checkout?code=');
+    await settleAfterOAuthCallback(page, log, waitForOverlay);
+    return;
+  }
 
   if (!outcome) {
     // Fallback: JS-based click. Bypasses Playwright's actionability
@@ -227,6 +244,9 @@ export async function handleLoginPromptIfPresent(
     });
 
     const second = await Promise.race([
+      page.waitForURL(SILENT_SSO_RETURN_URL, { timeout: 15_000 })
+        .then(() => 'silent-sso' as const)
+        .catch(() => null),
       page.waitForURL(/kinde\.com|\/api\/auth|\/(login|signin)/i, { timeout: 15_000 })
         .then(() => 'url-changed' as const)
         .catch(() => null),
@@ -239,6 +259,11 @@ export async function handleLoginPromptIfPresent(
       throw new Error(
         `After clicking Log in (native+JS), page did not open Kinde. url=${page.url().slice(0, 120)}  element=${JSON.stringify(elInfo)}`,
       );
+    }
+    if (second === 'silent-sso') {
+      log('  → Kinde session was live: silent SSO round-trip landed back on /checkout?code=');
+      await settleAfterOAuthCallback(page, log, waitForOverlay);
+      return;
     }
     log(`  → transition detected via evaluate-click: ${second}`);
   } else {
@@ -267,12 +292,24 @@ export async function handleLoginPromptIfPresent(
   //    tests/.auth/user.json. Walk any intermediate screens just in case.
   await completeGoogleAuthFlow(page, log);
   log('✓ signed in — back on KWH, waiting for callback to settle');
+  await settleAfterOAuthCallback(page, log, waitForOverlay);
+}
 
-  // KWH's OAuth callback lands with ?code=… in the URL. The page needs
-  // a moment to exchange the code + hydrate the checkout form before
-  // any input is interactive. On mobile-safari the redirect chain can
-  // take a beat longer than networkidle — explicitly wait for the URL
-  // to reach the KWH domain before declaring "signed in".
+/** KWH's /checkout landing after a Kinde round-trip, auth code attached. */
+const SILENT_SSO_RETURN_URL = /kitchenwarehouse\.com\.au\/checkout\?[^#]*\bcode=/i;
+
+/**
+ * KWH's OAuth callback lands with ?code=… in the URL. The page needs
+ * a moment to exchange the code + hydrate the checkout form before
+ * any input is interactive. On mobile-safari the redirect chain can
+ * take a beat longer than networkidle — explicitly wait for the URL
+ * to reach the KWH domain before declaring "signed in".
+ */
+async function settleAfterOAuthCallback(
+  page: Page,
+  log: Logger,
+  waitForOverlay: WaitForLoadingOverlay,
+): Promise<void> {
   await page.waitForLoadState('domcontentloaded').catch(() => undefined);
   await page
     .waitForURL(/staging\.kitchenwarehouse\.com\.au\/checkout/i, { timeout: 30_000 })

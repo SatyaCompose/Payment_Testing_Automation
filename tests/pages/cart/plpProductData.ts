@@ -118,7 +118,9 @@ export async function readPlpProductList(page: Page, log: Logger): Promise<PlpPr
 function normalizeProduct(raw: unknown): PlpProduct | null {
   const r = asRecord(raw);
   const name = asStr(r?.name);
-  const productUrl = asStr(r?.productUrl);
+  // KWH now ships `productUrl` as a link object (`{ href, text }`, confirmed
+  // live against /search?q=wok); older renders sent a bare string. Accept both.
+  const productUrl = asStr(r?.productUrl) ?? asStr(asRecord(r?.productUrl)?.href);
   if (!r || !name || !productUrl) return null;
 
   const stockStatus = Array.isArray(r.stockStatus)
