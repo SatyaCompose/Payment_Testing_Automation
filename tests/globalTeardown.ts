@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { displayDate, reportFileName, screenshotsRoot } from './utils/runTimestamp';
+import { displayDate, reportFileName, runStartedAtMs, screenshotsRoot } from './utils/runTimestamp';
 import {
   CHECKOUT_MATRIX,
   PAYMENT_METHODS,
@@ -71,22 +71,53 @@ const REPORT_SECTIONS: ReportSection[] = [...matrixSections('credit-card'), ...S
 const DESKTOP_PROJECTS = ['chromium-desktop', 'safari-desktop'];
 const MOBILE_PROJECTS = ['mobile-safari', 'android-chrome'];
 
-function screenshotsFor(caseDir: string, projects: string[]): string[] {
+interface Shot {
+  file: string;
+  modifiedAt: Date;
+  /**
+   * True only when the file was last written at or after this run started.
+   * A screenshot is rewritten (old one deleted first) every time a test
+   * captures it, so its modified time is the only fact the teardown has
+   * about when it was produced; it has no access to per-test results.
+   * If the run start was not recorded, nothing can be proven fresh.
+   */
+  fromThisRun: boolean;
+}
+
+let carriedOverCount = 0;
+
+function screenshotsFor(caseDir: string, projects: string[]): Shot[] {
   if (!fs.existsSync(caseDir)) return [];
+  // Read at call time, not import time: the start is recorded by globalSetup.
+  const runStartedAt = runStartedAtMs();
   return fs
     .readdirSync(caseDir)
     .filter((f) => projects.some((p) => f.startsWith(p)) && f.endsWith('.png'))
-    .map((f) => path.join(caseDir, f));
+    .map((f) => {
+      const file = path.join(caseDir, f);
+      const modifiedAt = fs.statSync(file).mtime;
+      return {
+        file,
+        modifiedAt,
+        fromThisRun: runStartedAt !== null && modifiedAt.getTime() >= runStartedAt,
+      };
+    });
 }
 
 function relative(from: string, to: string): string {
   return path.relative(path.dirname(from), to).split(path.sep).join('/');
 }
 
+function formatTimestamp(d: Date): string {
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${displayDate(d)} ${hh}:${mm}`;
+}
+
 function appendScreenshotBlock(
   lines: string[],
   label: string,
-  shots: string[],
+  shots: Shot[],
   reportPath: string,
 ): void {
   lines.push(`**${label}:**`, '');
@@ -94,13 +125,22 @@ function appendScreenshotBlock(
     lines.push('_(not captured this run)_', '');
     return;
   }
-  for (const f of shots) {
-    lines.push(`- \`${path.basename(f)}\` — ![](${relative(reportPath, f)})`);
+  for (const shot of shots) {
+    const image = `![](${relative(reportPath, shot.file)})`;
+    if (shot.fromThisRun) {
+      lines.push(`- \`${path.basename(shot.file)}\` — ${image}`);
+    } else {
+      carriedOverCount += 1;
+      lines.push(
+        `- \`${path.basename(shot.file)}\` — **CARRIED OVER, NOT FROM THIS RUN** (captured ${formatTimestamp(shot.modifiedAt)}; this test did not produce a new screenshot in this run, so this is not this run's result) — ${image}`,
+      );
+    }
   }
   lines.push('');
 }
 
 async function globalTeardown(): Promise<void> {
+  carriedOverCount = 0;
   const root = screenshotsRoot();
   fs.mkdirSync(root, { recursive: true });
 
@@ -127,8 +167,20 @@ async function globalTeardown(): Promise<void> {
     }
   }
 
+  if (carriedOverCount > 0) {
+    // Insert after the intro paragraph's trailing blank line, before the first '---' (index 6).
+    const warning = [
+      `> **WARNING: ${carriedOverCount} screenshot(s) below are CARRIED OVER from an earlier run, not produced by this run.** They are marked "CARRIED OVER, NOT FROM THIS RUN". Do not present them as this run's results.`,
+      '',
+    ];
+    lines.splice(6, 0, ...warning);
+  }
+
   fs.writeFileSync(reportPath, lines.join('\n'));
   console.log(`\n📄 Report written: ${path.relative(process.cwd(), reportPath)}\n`);
+  if (carriedOverCount > 0) {
+    console.log(`⚠️  ${carriedOverCount} screenshot(s) in the report are carried over from an earlier run and are labelled as such.\n`);
+  }
 }
 
 export default globalTeardown;

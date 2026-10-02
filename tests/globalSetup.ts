@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import { AUTH_FILE } from './fixtures/auth';
 import { isSignedInFile } from './fixtures/authState';
+import { markRunStart } from './utils/runTimestamp';
 
 /**
  * Runs once in the Playwright main process, before any worker spawns.
@@ -15,6 +16,8 @@ import { isSignedInFile } from './fixtures/authState';
  * start the run is safer than silently testing against the wrong identity.
  */
 async function globalSetup(): Promise<void> {
+  // Lets globalTeardown tell screenshots written by this run from older ones.
+  markRunStart();
   if (!fs.existsSync(AUTH_FILE)) {
     throw new Error(
       '\n\nNo saved auth session at tests/.auth/user.json.\n' +

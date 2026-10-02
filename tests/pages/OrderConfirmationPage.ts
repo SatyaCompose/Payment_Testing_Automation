@@ -10,40 +10,122 @@ export interface ConfirmationCaptureOptions {
   testInfo: TestInfo;
 }
 
+/**
+ * What the shared page looked like when the current test began. The suite
+ * reuses one page for every test in a worker, so a confirmation page left
+ * over from the previous test is still on screen when the next one starts.
+ */
+interface StartingPoint {
+  url: string;
+  orderNumber: string | null;
+  /** True once the main frame has been at any URL other than `url` since the mark. */
+  navigatedAway: boolean;
+}
+
+const startingPoints = new WeakMap<Page, StartingPoint>();
+const trackedPages = new WeakSet<Page>();
+
+const CONFIRMATION_URL = /order|confirmation|thank|success/i;
+const CONFIRMATION_TEXT = /thank you for your order|order confirmed|order complete|order successfully/i;
+const CONFIRMATION_TIMEOUT_MS = 60_000;
+
 export class OrderConfirmationPage extends BasePage {
   constructor(page: Page) {
     super(page);
   }
 
-  async expectSuccess(): Promise<string> {
-    // Success can be detected by either the URL changing to an order/
-    // confirmation path OR the "Thank you" text appearing on the page
-    // (KWH renders the confirmation in-place sometimes). Race both.
-    const urlSignal = this.page
-      .waitForURL(/order|confirmation|thank|success/i, { timeout: 60_000 })
-      .then(() => 'url' as const)
-      .catch(() => null);
-    const textSignal = this.page
-      .getByText(/thank you for your order|order confirmed|order complete|order successfully/i)
-      .first()
-      .waitFor({ state: 'visible', timeout: 60_000 })
-      .then(() => 'text' as const)
-      .catch(() => null);
-    const orderNumberSignal = this.page
-      .getByText(/CT-\d+/)
-      .first()
-      .waitFor({ state: 'visible', timeout: 60_000 })
-      .then(() => 'order-number' as const)
-      .catch(() => null);
+  /**
+   * Record the page's URL and any order number on screen right now, and start
+   * watching for navigation. Called by the `page` fixture at the start of every
+   * test, before any payment is attempted. `expectSuccess` then refuses to
+   * accept a confirmation that was already showing at this point.
+   */
+  static async markStartingPoint(page: Page): Promise<void> {
+    const state: StartingPoint = {
+      url: page.url(),
+      orderNumber: await OrderConfirmationPage.readVisibleOrderNumber(page),
+      navigatedAway: false,
+    };
+    startingPoints.set(page, state);
+    if (!trackedPages.has(page)) {
+      trackedPages.add(page);
+      page.on('framenavigated', (frame) => {
+        const current = startingPoints.get(page);
+        if (current && frame === page.mainFrame() && frame.url() !== current.url) {
+          current.navigatedAway = true;
+        }
+      });
+    }
+  }
 
-    const signal = await Promise.race([urlSignal, textSignal, orderNumberSignal]);
-    if (!signal) {
+  /** Order number currently displayed, or null. Does not wait for one to appear. */
+  private static async readVisibleOrderNumber(page: Page): Promise<string | null> {
+    const candidates = [
+      page.getByTestId('order-number'),
+      page.getByText(/CT-\d+/).first(),
+      page.getByText(/order (#|number|id)[:\s]*[A-Z0-9-]+/i).first(),
+    ];
+    for (const candidate of candidates) {
+      if (!(await candidate.isVisible().catch(() => false))) continue;
+      const text = (await candidate.textContent({ timeout: 1_000 }).catch(() => null))?.trim();
+      if (text) return text;
+    }
+    return null;
+  }
+
+  async expectSuccess(): Promise<string> {
+    const start = startingPoints.get(this.page);
+    if (!start) {
       throw new Error(
-        `Order confirmation not detected within 60s. URL=${this.page.url()}`,
+        'No starting point was recorded for this page, so a confirmation page from an earlier test could not be told apart from this test\'s. ' +
+          'Use the `page` fixture from tests/fixtures (it records the starting point), or call OrderConfirmationPage.markStartingPoint(page) before paying.',
+      );
+    }
+
+    // Confirmation counts only if something changed since this test began:
+    // the page navigated away from where it started, or a different order
+    // number is showing. Confirmation signals are URL path, "Thank you"
+    // text (KWH sometimes renders in place) and an order number.
+    let lastObservation = 'no confirmation signal seen';
+    const poll = async (): Promise<boolean> => {
+      const url = this.page.url();
+      const urlSignal = CONFIRMATION_URL.test(url);
+      const textSignal = await this.page
+        .getByText(CONFIRMATION_TEXT)
+        .first()
+        .isVisible()
+        .catch(() => false);
+      const shownOrderNumber = await OrderConfirmationPage.readVisibleOrderNumber(this.page);
+      if (!urlSignal && !textSignal && !shownOrderNumber) {
+        lastObservation = `no confirmation signal seen. URL=${url}`;
+        return false;
+      }
+      const changed =
+        start.navigatedAway ||
+        url !== start.url ||
+        (shownOrderNumber !== null && shownOrderNumber !== start.orderNumber);
+      if (!changed) {
+        lastObservation =
+          `a confirmation page is showing but it is the one that was already on screen when this test began ` +
+          `(URL=${url}, order number=${shownOrderNumber ?? 'none shown'}). ` +
+          'The page never navigated away and no new order number appeared, so this is the previous test\'s order, not this one.';
+        return false;
+      }
+      return true;
+    };
+
+    try {
+      await expect
+        .poll(poll, { timeout: CONFIRMATION_TIMEOUT_MS, intervals: [250, 500, 1_000] })
+        .toBe(true);
+    } catch {
+      throw new Error(
+        `Order confirmation not detected within ${CONFIRMATION_TIMEOUT_MS / 1000}s: ${lastObservation}. ` +
+          `Started at URL=${start.url}${start.orderNumber ? ` showing order ${start.orderNumber}` : ''}; now at URL=${this.page.url()}.`,
       );
     }
     // eslint-disable-next-line no-console
-    console.log(`[OrderConfirmationPage] ✓ confirmation detected via ${signal}`);
+    console.log('[OrderConfirmationPage] ✓ confirmation detected, and it differs from where this test started');
 
     const orderNumber =
       (await this.page.getByTestId('order-number').textContent().catch(() => null)) ??

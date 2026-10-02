@@ -226,6 +226,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
       });
       await context.addInitScript(CURSOR_OVERLAY_SCRIPT);
       const testPage = await context.newPage();
+      await OrderConfirmationPage.markStartingPoint(testPage);
       await use(testPage);
       // Read the raw video path BEFORE closing (path() only resolves
       // after close, but we grab the Video ref now so we can call it).
@@ -249,6 +250,10 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     // Default path: reuse the worker-scoped shared page.
     const existing = sharedContext.pages();
     const page = existing[0] ?? (await sharedContext.newPage());
+    // The page is shared across tests, so it may still be showing the previous
+    // test's confirmation. Record where this test starts so expectSuccess can
+    // require a change from here.
+    await OrderConfirmationPage.markStartingPoint(page);
     await use(page);
   },
 
