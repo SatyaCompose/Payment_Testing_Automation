@@ -2,9 +2,11 @@
  * Hand-run capture: how does the Kitchen Warehouse staging site actually
  * integrate Google Pay?
  *
- *   npm run gpay:capture                      # stealth ON, then stealth OFF
+ *   npm run gpay:capture                      # stealth ON, then stealth ON without PaymentRequest, then stealth OFF
  *   npm run gpay:capture -- --mode=stealth    # only stealth ON
  *   npm run gpay:capture -- --mode=plain      # only stealth OFF (plain Chromium)
+ *   npm run gpay:capture -- --mode=no-payment-request
+ *                                             # stealth ON, with window.PaymentRequest removed before any page script runs
  *
  * Standalone `tsx` script, same family as interactive-signin.ts: not a spec,
  * so it never runs in CI and is not touched by globalSetup or by the
@@ -41,7 +43,19 @@ import { CheckoutFlow } from '../flows/CheckoutFlow';
 
 dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
 
-type Mode = 'stealth' | 'plain';
+type Mode = 'stealth' | 'plain' | 'no-payment-request';
+
+/** The default run, in execution order. */
+const ALL_MODES: Mode[] = ['stealth', 'no-payment-request', 'plain'];
+
+function modeLabel(mode: Mode): string {
+  if (mode === 'stealth') return 'stealth ON';
+  if (mode === 'plain') return 'stealth OFF (plain Chromium)';
+  return 'stealth ON, window.PaymentRequest removed';
+}
+
+/** The pay.google.com document path the payment sheet iframe loads. */
+const PAYFRAME_PATH = '/gp/p/ui/payframe';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const OUTPUT_DIR = path.join(REPO_ROOT, 'docs', 'gpay');
@@ -243,6 +257,35 @@ const OBSERVER_SCRIPT = `
       cap.sdkShapeAtLoad = api ? { keys: Object.keys(api), paymentsClientWrapped: wrappedCtors.indexOf(api.PaymentsClient) !== -1 } : null;
     } catch (e) { note('load check', e); }
   });
+})();
+`;
+
+/**
+ * Used only by the no-payment-request mode. Added with `context.addInitScript`
+ * AFTER the observer, so the observer has already seen and wrapped the real
+ * PaymentRequest; this then deletes the property so that
+ * `window.PaymentRequest`, `'PaymentRequest' in window` and
+ * `typeof PaymentRequest` all report it as unavailable to every script that
+ * runs afterwards. If the delete does not take effect it falls back to a
+ * getter that returns undefined, and records which of the two was used.
+ *
+ * Same scope as the observer: top frame only, and never on google.com hosts.
+ * It is a string for the same reason OBSERVER_SCRIPT is.
+ */
+const REMOVE_PAYMENT_REQUEST_SCRIPT = `
+(function () {
+  if (window !== window.top) return;
+  var host = location.hostname || '';
+  if (host === 'google.com' || host.endsWith('.google.com')) return;
+  var state = { removedAt: Date.now(), path: location.pathname, hadPaymentRequestBefore: 'PaymentRequest' in window, method: 'delete', stillInWindow: null, typeofAfter: null, errors: [] };
+  window.__GPAY_PR_REMOVAL__ = state;
+  try { delete window.PaymentRequest; } catch (e) { state.errors.push('delete: ' + String(e && e.message ? e.message : e)); }
+  if ('PaymentRequest' in window) {
+    state.method = 'getter-returning-undefined';
+    try { Object.defineProperty(window, 'PaymentRequest', { get: function () { return undefined; }, configurable: true }); } catch (e) { state.errors.push('defineProperty: ' + String(e && e.message ? e.message : e)); }
+  }
+  state.stillInWindow = 'PaymentRequest' in window;
+  state.typeofAfter = typeof window.PaymentRequest;
 })();
 `;
 
@@ -539,10 +582,58 @@ async function describeFrame(f: Frame, shotPath: string): Promise<Rec> {
   const content = await measureContent(f);
   const element = await f.frameElement().catch(() => null);
   const box = element ? await element.boundingBox().catch(() => null) : null;
+  const iframeStyle = element
+    ? await element
+        .evaluate((node) => {
+          const el = node as Element;
+          const cs = window.getComputedStyle(el);
+          const r = el.getBoundingClientRect();
+          return {
+            display: cs.display,
+            visibility: cs.visibility,
+            opacity: cs.opacity,
+            width: Math.round(r.width),
+            height: Math.round(r.height),
+            intersectsViewport: r.right > 0 && r.bottom > 0 && r.left < window.innerWidth && r.top < window.innerHeight,
+          };
+        })
+        .catch(() => null)
+    : null;
+
+  // Only booleans and counts are kept: the text itself can hold a card tail or an email.
+  const text = await f.evaluate(() => (document.body ? document.body.innerText : '')).catch(() => '');
+  const textSignals = {
+    cardNumberShaped: /\b(?:\d[ -]?){13,19}\b/.test(text),
+    maskedCardTail: /[•*·]{2,}\s*\d{4}/.test(text),
+    containsPay: /\bpay\b/i.test(text),
+    containsContinue: /\bcontinue\b/i.test(text),
+    containsEmailShapedText: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(text),
+  };
+  const payOrContinueButtonCount = await f.getByRole('button', { name: /pay|continue/i }).count().catch(() => -1);
+
   const shot = element
-    ? await element.screenshot({ path: shotPath }).then(() => path.relative(REPO_ROOT, shotPath), (e: unknown) => `screenshot failed: ${errMsg(e)}`)
+    ? await element.screenshot({ path: shotPath, timeout: 8_000 }).then(() => path.relative(REPO_ROOT, shotPath), (e: unknown) => `screenshot failed: ${errMsg(e)}`)
     : 'no frame element to screenshot';
-  return { kind: 'frame', url: sanitizeUrl(f.url()), iframeBox: box, ...content, screenshot: shot };
+  let fallbackShot: string | null = null;
+  if (!shot.endsWith('.png')) {
+    const fallbackPath = shotPath.replace(/\.png$/, '-viewport.png');
+    fallbackShot = await f
+      .page()
+      .screenshot({ path: fallbackPath })
+      .then(() => path.relative(REPO_ROOT, fallbackPath), (e: unknown) => `viewport screenshot failed: ${errMsg(e)}`);
+  }
+  return {
+    kind: 'frame',
+    url: sanitizeUrl(f.url()),
+    isPayframe: new URL(f.url()).pathname.startsWith(PAYFRAME_PATH),
+    iframeBox: box,
+    iframeStyle,
+    ...content,
+    textSignals,
+    payOrContinueButtonCount,
+    screenshot: shot,
+    fallbackViewportScreenshot: fallbackShot,
+  };
 }
 
 async function askOperator(question: string): Promise<boolean | null> {
@@ -711,6 +802,8 @@ interface RunResult {
   completed: boolean;
   error?: string;
   environmentSignals?: unknown;
+  paymentRequestRemoval?: unknown;
+  consoleIssues?: Rec[];
   surface?: Rec;
   sdk?: { extracted: ExtractedSdk; rawCapture: Rec | null };
   network?: Rec;
@@ -745,6 +838,7 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
   let page: Page | undefined;
   let net: NetworkCapture | undefined;
   let surfaceReport: Rec | undefined;
+  let clicked = false;
 
   const collect = async (): Promise<void> => {
     if (net) {
@@ -777,6 +871,16 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
         .catch(() => null);
       const rawRec = asRec(raw);
       result.sdk = { extracted: extractSdk(rawRec), rawCapture: rawRec ?? null };
+      if (mode === 'no-payment-request') {
+        result.paymentRequestRemoval = await page
+          .evaluate(() => ({
+            recordedByInitScript: (window as unknown as { __GPAY_PR_REMOVAL__?: unknown }).__GPAY_PR_REMOVAL__ ?? null,
+            nowInWindow: 'PaymentRequest' in window,
+            nowTypeof: typeof (window as unknown as { PaymentRequest?: unknown }).PaymentRequest,
+            nowValueIsUndefined: (window as unknown as { PaymentRequest?: unknown }).PaymentRequest === undefined,
+          }))
+          .catch(() => null);
+      }
     }
   };
 
@@ -798,8 +902,31 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
     expect.configure({ timeout: 15_000 });
 
     await context.addInitScript(OBSERVER_SCRIPT);
+    // Init scripts run in the order they are added, so the observer sees the real PaymentRequest first.
+    if (mode === 'no-payment-request') await context.addInitScript(REMOVE_PAYMENT_REQUEST_SCRIPT);
     net = attachNetworkCapture(context);
     page = await context.newPage();
+
+    // Console errors and warnings from every frame of the page, kept verbatim,
+    // plus any other console line that mentions PaymentRequest or Google Pay.
+    const consoleIssues: Rec[] = [];
+    result.consoleIssues = consoleIssues;
+    const issueText = /PaymentRequest|google\s?pay|gpay|payments\.api|pay\.js/i;
+    page.on('console', (msg) => {
+      const text = msg.text();
+      if (consoleIssues.length >= 100) return;
+      if (msg.type() !== 'error' && msg.type() !== 'warning' && !issueText.test(text)) return;
+      consoleIssues.push({
+        phase: clicked ? 'after-click' : 'before-click',
+        type: msg.type(),
+        source: sanitizeUrl(msg.location().url || ''),
+        text: text.length > 2000 ? `${text.slice(0, 2000)}...[truncated]` : text,
+      });
+    });
+    page.on('pageerror', (err) => {
+      if (consoleIssues.length >= 100) return;
+      consoleIssues.push({ phase: clicked ? 'after-click' : 'before-click', type: 'pageerror', source: 'page', text: err.message.slice(0, 2000) });
+    });
 
     log('driving the checkout up to the payment step (Google Pay selected)...');
     const flow = new CheckoutFlow(page);
@@ -810,6 +937,8 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
       navigatorWebdriver: navigator.webdriver,
       userAgent: navigator.userAgent,
       paymentRequestAvailable: typeof window.PaymentRequest === 'function',
+      paymentRequestInWindow: 'PaymentRequest' in window,
+      paymentRequestTypeof: typeof (window as unknown as { PaymentRequest?: unknown }).PaymentRequest,
     }));
 
     const gpayButton = page.locator(GPAY_BUTTON_SELECTOR).filter({ visible: true }).first();
@@ -919,6 +1048,7 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
     const collector = registerSurfaceListeners(page, context);
     log("clicking the Google Pay button once. Look at the browser window now. This script will NOT click Pay.");
     let clickError: string | undefined;
+    clicked = true;
     await gpayButton.click({ timeout: 15_000 }).catch((e: unknown) => {
       clickError = errMsg(e);
       log(`click failed: ${clickError}`);
@@ -928,7 +1058,8 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
     const windowElapsed = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, SHEET_WINDOW_MS);
     });
-    await Promise.race([collector.firstSurface, windowElapsed]);
+    // This mode always watches the full window, so a sheet that renders after the first frame event is still observed.
+    await (mode === 'no-payment-request' ? windowElapsed : Promise.race([collector.firstSurface, windowElapsed]));
     if (timer) clearTimeout(timer);
 
     // Enumerate frames directly as well - a frame that attached without a navigation event still counts.
@@ -949,7 +1080,16 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
     }
     const pagePath = path.join(shotDir, `${mode}-checkout-page-after-click.png`);
     await page.screenshot({ path: pagePath }).then(() => result.screenshots.push(path.relative(REPO_ROOT, pagePath)), () => undefined);
-    for (const s of surfaces) if (typeof s.screenshot === 'string' && s.screenshot.endsWith('.png')) result.screenshots.push(s.screenshot);
+    const fullPagePath = path.join(shotDir, `${mode}-checkout-page-after-click-fullpage.png`);
+    await page.screenshot({ path: fullPagePath, fullPage: true }).then(() => result.screenshots.push(path.relative(REPO_ROOT, fullPagePath)), () => undefined);
+    for (const s of surfaces) {
+      for (const key of ['screenshot', 'fallbackViewportScreenshot']) {
+        const v = s[key];
+        if (typeof v === 'string' && v.endsWith('.png')) result.screenshots.push(v);
+      }
+    }
+    const mainFrame = page.mainFrame();
+    const allFramesAfterClick = page.frames().map((f) => ({ main: f === mainFrame, url: sanitizeUrl(f.url()) }));
 
     // Read the SDK capture now so PaymentRequest / loadPaymentData signals are known for the verdict.
     await collect();
@@ -957,6 +1097,19 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
     const prConstructed = asArr(pr?.constructed).length;
     const prShowCalled = asArr(pr?.constructed).some((e) => asArr(asRec(e)?.calls).some((c) => asRec(c)?.method === 'show'));
     const loadPaymentDataCalled = result.sdk?.extracted.calls.includes('loadPaymentData') ?? false;
+    const loadCall = asArr(result.sdk?.rawCapture?.calls)
+      .map(asRec)
+      .find((c) => c?.method === 'loadPaymentData');
+    const loadPaymentDataOutcome = !loadCall
+      ? 'not-called'
+      : loadCall.threw !== undefined
+        ? 'threw-synchronously'
+        : loadCall.rejected !== undefined
+          ? 'rejected'
+          : loadCall.resolved !== undefined
+            ? 'resolved'
+            : 'pending-at-end-of-window';
+    const payframeSurface = surfaces.find((s) => s.isPayframe === true);
     const hasContent = surfaces.some((s) => s.contentAppeared === true && Number(s.bodyTextLength) > 0);
 
     let operatorSawSheet: boolean | null = null;
@@ -990,6 +1143,22 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
           : 'The click did not reach loadPaymentData, so the button never asked Google for a sheet.';
       }
     }
+    if (mode === 'no-payment-request') {
+      // The payframe is the only surface that counts here; the button-image frame always exists.
+      const style = asRec(payframeSurface?.iframeStyle);
+      const sized = Number(style?.width) > 0 && Number(style?.height) > 0 && style?.display !== 'none' && style?.visibility !== 'hidden';
+      const signals = asRec(payframeSurface?.textSignals);
+      const hasSheetSignals =
+        Number(payframeSurface?.visibleButtonCount) > 0 ||
+        Number(payframeSurface?.payOrContinueButtonCount) > 0 ||
+        Object.values(signals ?? {}).some((v) => v === true);
+      if (!payframeSurface) verdict = 'payframe-not-present';
+      else if (sized && hasSheetSignals) verdict = 'payframe-sized-with-sheet-signals';
+      else if (sized) verdict = 'payframe-sized-but-no-sheet-signals';
+      else verdict = 'payframe-present-but-not-sized-or-hidden';
+      explanation = `payframe present: ${Boolean(payframeSurface)}; sized and displayed: ${sized}; sheet signals in its text/buttons: ${hasSheetSignals}; PaymentRequest.show() called: ${prShowCalled}; loadPaymentData outcome: ${loadPaymentDataOutcome}.`;
+      automatable = sized && hasSheetSignals ? true : null;
+    }
     surfaceReport = {
       verdict,
       automatable,
@@ -1002,6 +1171,10 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
       paymentRequestConstructedCount: prConstructed,
       paymentRequestShowCalled: prShowCalled,
       loadPaymentDataCalled,
+      loadPaymentDataOutcome,
+      loadPaymentDataDetail: loadCall ? { threw: loadCall.threw ?? null, rejected: loadCall.rejected ?? null } : null,
+      payframe: payframeSurface ?? null,
+      allFramesAfterClick,
       operatorSawSheet,
     };
     result.surface = surfaceReport;
@@ -1026,9 +1199,10 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
 
 function printSummary(r: RunResult): void {
   const line = (k: string, v: unknown) => console.log(`  ${k.padEnd(34)} ${typeof v === 'string' ? v : JSON.stringify(v)}`);
-  console.log(`\n=== Run: ${r.mode === 'stealth' ? 'stealth ON' : 'stealth OFF (plain Chromium)'} ===`);
+  console.log(`\n=== Run: ${modeLabel(r.mode)} ===`);
   if (r.error) console.log(`  RUN ERROR: ${r.error}`);
   if (r.environmentSignals) line('browser signals', r.environmentSignals);
+  if (r.paymentRequestRemoval) line('PaymentRequest removal state', r.paymentRequestRemoval);
   const s = r.surface;
   if (s) {
     console.log('\n  [1] Sheet surface');
@@ -1040,17 +1214,32 @@ function printSummary(r: RunResult): void {
     line('PaymentRequest constructed', String(s.paymentRequestConstructedCount));
     line('PaymentRequest.show() called', String(s.paymentRequestShowCalled));
     line('loadPaymentData called', String(s.loadPaymentDataCalled));
+    line('loadPaymentData outcome', String(s.loadPaymentDataOutcome));
+    if (s.loadPaymentDataDetail) line('loadPaymentData detail', s.loadPaymentDataDetail);
     for (const surface of asArr(s.surfaces).map(asRec)) {
       if (!surface) continue;
       line(`  ${String(surface.kind)} content`, {
+        url: surface.url,
         title: surface.title,
         bodyTextLength: surface.bodyTextLength,
         visibleButtonCount: surface.visibleButtonCount,
         contentAppeared: surface.contentAppeared,
       });
+      if (surface.kind === 'frame') {
+        line('    iframe box / style', { box: surface.iframeBox, style: surface.iframeStyle });
+        line('    text signals', { ...asRec(surface.textSignals), payOrContinueButtons: surface.payOrContinueButtonCount });
+        line('    screenshot', { element: surface.screenshot, viewportFallback: surface.fallbackViewportScreenshot });
+      }
     }
+    line('all frames after click', asArr(s.allFramesAfterClick));
+    if (!asRec(s.payframe)) console.log(`  No frame under ${PAYFRAME_PATH} was found after the click.`);
   } else {
     console.log('\n  [1] Sheet surface: not reached (see run error).');
+  }
+  if (r.consoleIssues) {
+    console.log('\n  Console errors / warnings / Google Pay mentions (verbatim)');
+    if (r.consoleIssues.length === 0) console.log('  none');
+    for (const c of r.consoleIssues) console.log(`  [${String(c.phase)}] ${String(c.type)} ${String(c.source)}: ${String(c.text)}`);
   }
   const sdk = r.sdk?.extracted;
   if (sdk) {
@@ -1106,16 +1295,16 @@ function printSummary(r: RunResult): void {
 
 function parseModes(): Mode[] {
   const arg = process.argv.find((a) => a.startsWith('--mode='));
-  const value = arg?.slice('--mode='.length) ?? 'both';
-  if (value === 'both') return ['stealth', 'plain'];
-  if (value === 'stealth' || value === 'plain') return [value];
-  throw new Error(`Unknown --mode=${value}. Use stealth, plain or both.`);
+  const value = arg?.slice('--mode='.length) ?? 'all';
+  if (value === 'all' || value === 'both') return ALL_MODES;
+  if (value === 'stealth' || value === 'plain' || value === 'no-payment-request') return [value];
+  throw new Error(`Unknown --mode=${value}. Use stealth, plain, no-payment-request or all.`);
 }
 
 async function main(): Promise<void> {
   const modes = parseModes();
   console.log('\n=== KWH Payments - Google Pay integration capture ===');
-  console.log(`Runs: ${modes.map((m) => (m === 'stealth' ? 'stealth ON' : 'stealth OFF')).join(', ')}. A real browser window opens for each.`);
+  console.log(`Runs: ${modes.map(modeLabel).join('; ')}. A real browser window opens for each.`);
   console.log('The script clicks the Google Pay button once and NEVER clicks Pay. Nothing is purchased.\n');
 
   // Fail closed: without a genuinely signed-in session the flow would silently test as a guest.
@@ -1135,7 +1324,7 @@ async function main(): Promise<void> {
 
   const runs: RunResult[] = [];
   for (const mode of modes) {
-    console.log(`--- Starting run: ${mode === 'stealth' ? 'stealth ON' : 'stealth OFF'} ---`);
+    console.log(`--- Starting run: ${modeLabel(mode)} ---`);
     const r = await runCapture(mode, shotDir);
     runs.push(r);
     printSummary(r);
@@ -1156,9 +1345,9 @@ async function main(): Promise<void> {
   }
 
   const comparison =
-    runs.length === 2
+    runs.length > 1
       ? {
-          note: 'The difference between these two verdicts is what settles whether the sheet renders under automation.',
+          note: 'Compare these verdicts across modes to see whether the sheet renders under automation.',
           verdicts: Object.fromEntries(runs.map((r) => [r.mode, asRec(r.surface)?.verdict ?? 'no verdict (run failed)'])),
         }
       : undefined;
@@ -1175,7 +1364,7 @@ async function main(): Promise<void> {
     },
     process.env.TEST_USER_EMAIL ?? '',
   );
-  const suffix = modes.length === 2 ? '' : `-${modes[0]}`;
+  const suffix = modes.length === ALL_MODES.length ? '' : `-${modes.join('-')}`;
   const file = path.join(OUTPUT_DIR, `capture-${date}${suffix}.json`);
   fs.writeFileSync(file, JSON.stringify(output, null, 2));
   console.log(`\nSaved (token, address, email and phone redacted): ${path.relative(REPO_ROOT, file)}`);

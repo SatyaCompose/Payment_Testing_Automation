@@ -1,0 +1,1564 @@
+{
+  "capturedAt": "2026-10-02T16:21:37.511Z",
+  "stagingOrigin": "https://staging.kitchenwarehouse.com.au",
+  "flow": {
+    "userType": "logged-in",
+    "shipping": "standard",
+    "region": "AU",
+    "payment": "gpay"
+  },
+  "productionEnvironmentDetected": false,
+  "runs": [
+    {
+      "mode": "no-payment-request",
+      "startedAt": "2026-10-02T16:20:07.084Z",
+      "completed": true,
+      "screenshots": [
+        "screenshots\\gpay-capture\\2026-10-02\\no-payment-request-checkout-page-after-click.png",
+        "screenshots\\gpay-capture\\2026-10-02\\no-payment-request-checkout-page-after-click-fullpage.png",
+        "screenshots\\gpay-capture\\2026-10-02\\no-payment-request-popup-1.png",
+        "screenshots\\gpay-capture\\2026-10-02\\no-payment-request-frame-1-viewport.png"
+      ],
+      "consoleIssues": [
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/qxm9/",
+          "text": "Failed to load resource: the server responded with a status of 403 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "warning",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/pages/_app-a8aed68e0239e512.js",
+          "text": "Unhandled client error (resource-error) on https://staging.kitchenwarehouse.com.au/cart {\"kind\":\"resource-error\",\"message\":\"Failed to load script\",\"source\":\"https://staging.kitchenwarehouse.com.au/qxm9/\",\"url\":\"https://staging.kitchenwarehouse.com.au/cart\",\"buildId\":\"njj_jzsxqGauPLOkGbOau\",\"visibility\":\"visible\"}"
+        },
+        {
+          "phase": "before-click",
+          "type": "warning",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/pages/_app-a8aed68e0239e512.js",
+          "text": "[Kinde] useKindeAuth() is deprecated. Please use useKindeBrowserClient() instead. useKindeAuth will be removed in a future major version."
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/api/auth/setup",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/api/auth/setup",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+          "text": "Failed to load resource: the server responded with a status of 504 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+          "text": "Failed to load resource: the server responded with a status of 504 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+          "text": "Failed to load resource: the server responded with a status of 504 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/products/getRecommendations",
+          "text": "Failed to load resource: the server responded with a status of 500 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/2869.78b467b379c6c0ae.js",
+          "text": "ProduceCarouselBySkuTastic error: Error: Failed to fetch bought-together recommendations\n    at g (https://staging.kitchenwarehouse.com.au/_next/static/chunks/2698-43ca09f855174e53.js:19:30639)\n    at async https://staging.kitchenwarehouse.com.au/_next/static/chunks/2869.78b467b379c6c0ae.js:1:3452"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+          "text": "Failed to load resource: the server responded with a status of 504 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "Unhandled client error (resource-error) on https://staging.kitchenwarehouse.com.au/cart {\"kind\":\"resource-error\",\"message\":\"Failed to load script\",\"source\":\"https://staging.kitchenwarehouse.com.au/qxm9/\",\"url\":\"https://staging.kitchenwarehouse.com.au/cart\",\"buildId\":\"njj_jzsxqGauPLOkGbOau\",\"visibility\":\"visible\"}"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "Error string also Used..."
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "Datadog Browser SDK: DD_RUM is already initialized."
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "Datadog Browser SDK: DD_LOGS is already initialized."
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/qxm9/",
+          "text": "Failed to load resource: the server responded with a status of 403 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "warning",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/pages/_app-a8aed68e0239e512.js",
+          "text": "[Kinde] useKindeAuth() is deprecated. Please use useKindeBrowserClient() instead. useKindeAuth will be removed in a future major version."
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/4071.29dabfceab67de57.js",
+          "text": "Error string also Used..."
+        },
+        {
+          "phase": "before-click",
+          "type": "warning",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/pages/_app-a8aed68e0239e512.js",
+          "text": "Unhandled client error (resource-error) on https://staging.kitchenwarehouse.com.au/checkout {\"kind\":\"resource-error\",\"message\":\"Failed to load script\",\"source\":\"https://staging.kitchenwarehouse.com.au/qxm9/\",\"url\":\"https://staging.kitchenwarehouse.com.au/checkout\",\"buildId\":\"njj_jzsxqGauPLOkGbOau\",\"visibility\":\"visible\"}"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "Unhandled client error (resource-error) on https://staging.kitchenwarehouse.com.au/checkout {\"kind\":\"resource-error\",\"message\":\"Failed to load script\",\"source\":\"https://staging.kitchenwarehouse.com.au/qxm9/\",\"url\":\"https://staging.kitchenwarehouse.com.au/checkout\",\"buildId\":\"njj_jzsxqGauPLOkGbOau\",\"visibility\":\"visible\"}"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+          "text": "Failed to load resource: the server responded with a status of 504 ()"
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "Datadog Browser SDK: DD_RUM is already initialized."
+        },
+        {
+          "phase": "before-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "Datadog Browser SDK: DD_LOGS is already initialized."
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://play.google.com/log?format=&hasfast=&authuser=",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://pay.google.com/gp/p/js/pay.js",
+          "text": "Cross-Origin-Opener-Policy policy would block the window.closed call."
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://pay.google.com/gp/p/js/pay.js",
+          "text": "Cross-Origin-Opener-Policy policy would block the window.closed call."
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "initCybersource failed due to the error: e"
+        },
+        {
+          "phase": "after-click",
+          "type": "error",
+          "source": "https://staging.kitchenwarehouse.com.au/_next/static/chunks/3275.0eff022ae2d0830a.js",
+          "text": "initCybersource errored at 1790958066558 {\"message\":\"MicroformError: Unable to locate a DOM node using the supplied selector string.\",\"error\":\"{\\\"name\\\":\\\"MicroformError\\\",\\\"reason\\\":\\\"FIELD_LOAD_CONTAINER_SELECTOR\\\",\\\"message\\\":\\\"Unable to locate a DOM node using the supplied selector string.\\\",\\\"informationLink\\\":\\\"https://www.cybersource.com/products/payment_security/secure_acceptance\\\"}\"}"
+        }
+      ],
+      "environmentSignals": {
+        "navigatorWebdriver": false,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
+        "paymentRequestAvailable": false,
+        "paymentRequestInWindow": false,
+        "paymentRequestTypeof": "undefined"
+      },
+      "buttonDom": {
+        "outerHTML": "<button class=\"gpay-button black buy long en border-inset\" id=\"gpay-button-online-api-id\" type=\"button\" aria-label=\"Buy with GPay\"></button>",
+        "tag": "button",
+        "roleAttribute": null,
+        "ariaLabel": "Buy with GPay",
+        "ariaAttributes": {
+          "aria-label": "Buy with GPay"
+        },
+        "tabindex": null,
+        "insideShadowRoot": false,
+        "sameDocumentIsTopFrame": true,
+        "rect": {
+          "x": 471,
+          "y": 584,
+          "w": 480,
+          "h": 40
+        },
+        "computed": {
+          "display": "inline-block",
+          "visibility": "visible",
+          "pointerEvents": "auto",
+          "position": "static",
+          "zIndex": "auto"
+        },
+        "ancestry": [
+          {
+            "tag": "div",
+            "id": null,
+            "class": "",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "google-pay-button-container",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "googlepaybutton_googlepay-wrapper__205MW",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "review-button-wrapper group absolute bottom-0 w-full md:w-[calc(100%_-_36px)]",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "section",
+            "id": null,
+            "class": "lg:col-span-8",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "ml-0 mt-6 flex flex-col md:ml-9 max-md:!mt-2",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "my-6 relative mb-[88px] md:mb-32",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "flex-1",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "max-w-344 mx-auto !max-w-[1036px] lg:gap-[120px] flex",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "-mx-4 px-5 lg:-mx-10",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": "a847c4fc-66d0-41ea-ae08-24e0c375aeab",
+            "class": "tasticWrapper w-full false block md:block xl:block",
+            "role": null,
+            "ariaLabel": null
+          },
+          {
+            "tag": "div",
+            "id": null,
+            "class": "cellLayout",
+            "role": null,
+            "ariaLabel": null
+          }
+        ],
+        "elementFromPointAtButtonCentre": {
+          "element": {
+            "tag": "button",
+            "id": "gpay-button-online-api-id",
+            "class": "gpay-button black buy long en border-inset",
+            "role": null,
+            "ariaLabel": "Buy with GPay"
+          },
+          "isButtonOrDescendant": true
+        },
+        "placeOrder": {
+          "pointerEvents": "none",
+          "rect": {
+            "x": 471,
+            "y": 584,
+            "w": 480,
+            "h": 48
+          },
+          "elementFromPointAtPlaceOrderCentre": {
+            "element": {
+              "tag": "button",
+              "id": "gpay-button-online-api-id",
+              "class": "gpay-button black buy long en border-inset",
+              "role": null,
+              "ariaLabel": "Buy with GPay"
+            },
+            "isButtonOrDescendant": true
+          }
+        },
+        "accessibilitySnapshot": "- button \"Buy with GPay\"",
+        "foundInIframes": [],
+        "hitTest": {
+          "topAtCentreBeforeWaiting": "button.gpay-button black buy long en border-inset",
+          "buttonWasOnTopWithin15s": true,
+          "placeOrderPointerEventsNeutralisedByThisScript": false,
+          "topAtCentreAfterWaiting": "button.gpay-button black buy long en border-inset"
+        }
+      },
+      "network": {
+        "payJs": {
+          "requested": true,
+          "requests": [
+            {
+              "url": "https://pay.google.com/gp/p/js/pay.js",
+              "status": 200,
+              "failure": null
+            }
+          ]
+        },
+        "googlePayRequests": [
+          {
+            "url": "https://pay.google.com/gp/p/js/pay.js",
+            "method": "GET",
+            "resourceType": "script",
+            "status": 200
+          },
+          {
+            "url": "https://pay.google.com/gp/p/ui/payframe?origin=&mid=",
+            "method": "GET",
+            "resourceType": "document",
+            "status": 200
+          },
+          {
+            "url": "https://pay.google.com/gp/p/loading",
+            "method": "GET",
+            "resourceType": "document",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://pay.google.com/gp/p/ui/pay?ng=&expids=",
+            "method": "GET",
+            "resourceType": "document",
+            "status": 200
+          },
+          {
+            "url": "https://pay.google.com/gp/p/_/InstantbuyFrontendBuyflowPayUi/cspreport/fine-allowlist",
+            "method": "POST",
+            "resourceType": "other",
+            "status": 204
+          },
+          {
+            "url": "https://pay.google.com/gp/p/apis/buyflow/activesessionindex",
+            "method": "POST",
+            "resourceType": "xhr",
+            "status": 200
+          },
+          {
+            "url": "https://pay.google.com/gp/p/ui/pay",
+            "method": "GET",
+            "resourceType": "xhr",
+            "status": 200
+          },
+          {
+            "url": "https://payments.google.com/gp/w/u/0/auth_warmup?eo=&origin=&wt=&awit=",
+            "method": "GET",
+            "resourceType": "document",
+            "status": 302
+          },
+          {
+            "url": "https://payments.google.com/gp/w/u/0/parameters?eo=&origin=&cori=&pcn=",
+            "method": "GET",
+            "resourceType": "document",
+            "status": 302
+          },
+          {
+            "url": "https://payments.google.com/payments/jslogs?message=&zx=",
+            "method": "GET",
+            "resourceType": "image"
+          }
+        ],
+        "cybersourceRequests": [
+          {
+            "url": "https://testflex.cybersource.com/microform/bundle/v2.12.1/flex-microform.min.js",
+            "method": "GET",
+            "resourceType": "script",
+            "status": 200
+          }
+        ],
+        "kwhAndFrontasticNonGetRequests": [
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/ct-auth/getAccessTokenByRefreshToken",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "refreshToken"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://staging.kitchenwarehouse.com.au/cdn-cgi/challenge-platform/h/b/precursor/d76008a69eab/0.8536455328706611:1790953528:_MerkdcVmLkt8BH6pTO1rk5xPMAkebHoycRYFufMlSc/a44508c4d8937f13",
+            "method": "POST",
+            "resourceType": "xhr",
+            "postKeys": [
+              "[opaque body, 17320 chars]"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/builder/getStoreHours",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://staging.kitchenwarehouse.com.au/cdn-cgi/rum",
+            "method": "POST",
+            "resourceType": "xhr",
+            "postKeys": [
+              "bi",
+              "bi.be",
+              "bi.bev",
+              "bi.bv",
+              "bi.ov",
+              "eventType",
+              "firstContentfulPaint",
+              "firstPaint",
+              "location",
+              "memory",
+              "memory.jsHeapSizeLimit",
+              "memory.totalJSHeapSize",
+              "memory.usedJSHeapSize",
+              "nt",
+              "pageloadId",
+              "siteToken",
+              "st",
+              "startTime",
+              "timingsV2",
+              "timingsV2.connectEnd",
+              "timingsV2.connectStart",
+              "timingsV2.decodedBodySize",
+              "timingsV2.domComplete",
+              "timingsV2.domInteractive",
+              "timingsV2.domainLookupEnd",
+              "timingsV2.domainLookupStart",
+              "timingsV2.finalResponseHeadersStart",
+              "timingsV2.firstInterimResponseStart",
+              "timingsV2.loadEventEnd",
+              "timingsV2.loadEventStart",
+              "timingsV2.nextHopProtocol",
+              "timingsV2.requestStart",
+              "timingsV2.responseEnd",
+              "timingsV2.responseStart",
+              "timingsV2.secureConnectionStart",
+              "timingsV2.transferSize",
+              "versions",
+              "versions.fl",
+              "versions.js",
+              "versions.timings"
+            ],
+            "status": 204
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 504
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 504
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 504
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 504
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/products/getRecommendations",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "maxRecommendations",
+              "model",
+              "objectIDs",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 500
+          },
+          {
+            "url": "https://staging.kitchenwarehouse.com.au/cdn-cgi/rum",
+            "method": "POST",
+            "resourceType": "ping",
+            "postKeys": [],
+            "status": 204
+          },
+          {
+            "url": "https://staging.kitchenwarehouse.com.au/cdn-cgi/rum",
+            "method": "POST",
+            "resourceType": "xhr",
+            "postKeys": [
+              "bi",
+              "bi.be",
+              "bi.bev",
+              "bi.bv",
+              "bi.ov",
+              "eventType",
+              "location",
+              "n",
+              "nt",
+              "ntapi",
+              "pageloadId",
+              "referrer",
+              "siteToken",
+              "st",
+              "startTime",
+              "versions",
+              "versions.fl",
+              "versions.js",
+              "versions.timings"
+            ],
+            "status": 204
+          },
+          {
+            "url": "https://staging.kitchenwarehouse.com.au/cdn-cgi/challenge-platform/h/b/precursor/d76008a69eab/0.8536455328706611:1790953528:_MerkdcVmLkt8BH6pTO1rk5xPMAkebHoycRYFufMlSc/a44508c4d8937f13",
+            "method": "POST",
+            "resourceType": "xhr",
+            "postKeys": [
+              "[opaque body, 17623 chars]"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/checkout/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://staging.kitchenwarehouse.com.au/cdn-cgi/rum",
+            "method": "POST",
+            "resourceType": "ping",
+            "postKeys": [],
+            "status": 204
+          },
+          {
+            "url": "https://tagmanager.kitchenwarehouse.com.au/g/collect?v=&tid=&gtm=&_p=&gcd=&npa=&dma=&gdid=&ecid=&_eu=&are=&cid=&ec_mode=&frm=&ngs=&pscdl=&rcb=&sr=&uaa=&uab=&uafvl=&uam=&uamb=&uap=&uapv=&uaw=&ul=&ur=&sst.gch=&sst.etld=&sst.tft=&sst.lpc=&sst.navt=&sst.ude=&sst.sw_exp=&_s=&tag_exp=&sid=&sct=&seg=&dl=&dt=&_tu=&en=&gap.sstd=&epn.event_time=&ep.page_type=&ep.x-fb-ud-external_id=&ep.x-fb-ck-fbp=&evnid=&ep.page_view_event=&_et=&tfd=",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [],
+            "status": 200
+          },
+          {
+            "url": "https://tagmanager.kitchenwarehouse.com.au/g/collect?v=&tid=&gtm=&_p=&gcd=&npa=&dma=&gdid=&ecid=&_eu=&are=&cid=&ec_mode=&frm=&ngs=&pscdl=&rcb=&sr=&uaa=&uab=&uafvl=&uam=&uamb=&uap=&uapv=&uaw=&ul=&ur=&sst.gch=&sst.etld=&sst.tft=&sst.lpc=&sst.navt=&sst.ude=&sst.sw_exp=&_s=&tag_exp=&sid=&sct=&seg=&dl=&dt=&_tu=&en=&gap.sstd=&epn.event_time=&ep.page_type=&ep.x-fb-ud-external_id=&ep.x-fb-ck-fbp=&evnid=&_et=&tfd=",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [],
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://staging.kitchenwarehouse.com.au/cdn-cgi/challenge-platform/h/b/precursor/d76008a69eab/0.8536455328706611:1790953528:_MerkdcVmLkt8BH6pTO1rk5xPMAkebHoycRYFufMlSc/a445095e6ce97f13",
+            "method": "POST",
+            "resourceType": "xhr",
+            "postKeys": [
+              "[opaque body, 17519 chars]"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://staging.kitchenwarehouse.com.au/cdn-cgi/rum",
+            "method": "POST",
+            "resourceType": "xhr",
+            "postKeys": [
+              "bi",
+              "bi.be",
+              "bi.bev",
+              "bi.bv",
+              "bi.ov",
+              "eventType",
+              "firstContentfulPaint",
+              "firstPaint",
+              "location",
+              "memory",
+              "memory.jsHeapSizeLimit",
+              "memory.totalJSHeapSize",
+              "memory.usedJSHeapSize",
+              "nt",
+              "pageloadId",
+              "referrer",
+              "siteToken",
+              "st",
+              "startTime",
+              "timingsV2",
+              "timingsV2.connectEnd",
+              "timingsV2.connectStart",
+              "timingsV2.decodedBodySize",
+              "timingsV2.domComplete",
+              "timingsV2.domInteractive",
+              "timingsV2.domainLookupEnd",
+              "timingsV2.domainLookupStart",
+              "timingsV2.finalResponseHeadersStart",
+              "timingsV2.firstInterimResponseStart",
+              "timingsV2.loadEventEnd",
+              "timingsV2.loadEventStart",
+              "timingsV2.nextHopProtocol",
+              "timingsV2.requestStart",
+              "timingsV2.responseEnd",
+              "timingsV2.responseStart",
+              "timingsV2.secureConnectionStart",
+              "timingsV2.transferSize",
+              "versions",
+              "versions.fl",
+              "versions.js",
+              "versions.timings"
+            ],
+            "status": 204
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/mergeCart",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "anonymous_token",
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/account/getcustomer",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/wishlist/getAllWishlists",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/wishlist/getFavRecipesAndBrands",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 504
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/account/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/checkout/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/account/getcustomer",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/storelocator/storedetail",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "key",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/cart/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/checkout/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/checkout/getCsrfToken",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/checkout/validatestock",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "deliveryMode",
+              "isAnonymousUser",
+              "isDeliveryTypeSwitched",
+              "postcode",
+              "shippingAddress",
+              "shippingAddress.address1",
+              "shippingAddress.address2",
+              "shippingAddress.city",
+              "shippingAddress.company",
+              "shippingAddress.country",
+              "shippingAddress.firstName",
+              "shippingAddress.lastName",
+              "shippingAddress.latitude",
+              "shippingAddress.longitude",
+              "shippingAddress.postcode",
+              "shippingAddress.state",
+              "shippingAddress.suburb",
+              "shippingMethodId",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://tagmanager.kitchenwarehouse.com.au/g/collect?v=&tid=&gtm=&_p=&gcd=&npa=&dma=&gdid=&ecid=&_eu=&are=&cid=&ec_mode=&frm=&ngs=&pscdl=&rcb=&sr=&uaa=&uab=&uafvl=&uam=&uamb=&uap=&uapv=&uaw=&ul=&ur=&sst.gch=&sst.etld=&sst.tft=&sst.lpc=&sst.navt=&sst.ude=&sst.sw_exp=&_s=&tag_exp=&cu=&uid=&sid=&sct=&seg=&dl=&dr=&dt=&_tu=&tfd=&richsstsse=",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "_c",
+              "_et",
+              "en",
+              "ep.page_type",
+              "ep.shipping_tier",
+              "ep.x-fb-ck-fbp",
+              "ep.x-fb-ud-external_id",
+              "epn.event_time",
+              "epn.value",
+              "evnid",
+              "gap.sstd",
+              "pr1",
+              "pr10",
+              "pr11",
+              "pr12",
+              "pr13",
+              "pr14",
+              "pr2",
+              "pr3",
+              "pr4",
+              "pr5",
+              "pr6",
+              "pr7",
+              "pr8",
+              "pr9"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/checkout/updateCheckoutDetails",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "billingAddress",
+              "billingAddress.address1",
+              "billingAddress.address2",
+              "billingAddress.city",
+              "billingAddress.company",
+              "billingAddress.country",
+              "billingAddress.firstName",
+              "billingAddress.lastName",
+              "billingAddress.latitude",
+              "billingAddress.longitude",
+              "billingAddress.postcode",
+              "billingAddress.state",
+              "billingAddress.suburb",
+              "billingContactDetails",
+              "billingContactDetails.firstName",
+              "billingContactDetails.lastName",
+              "billingContactDetails.phoneNumber",
+              "contactDetails",
+              "contactDetails.firstName",
+              "contactDetails.lastName",
+              "contactDetails.phoneNumber",
+              "customer_reference",
+              "deliveryMode",
+              "email",
+              "isAnonymousUser",
+              "pickUpPerson",
+              "pickUpPerson.firstName",
+              "pickUpPerson.lastName",
+              "pickUpPerson.phoneNumber",
+              "selectedStoreId",
+              "shippingAddress",
+              "shippingAddress.address1",
+              "shippingAddress.address2",
+              "shippingAddress.city",
+              "shippingAddress.company",
+              "shippingAddress.country",
+              "shippingAddress.firstName",
+              "shippingAddress.lastName",
+              "shippingAddress.latitude",
+              "shippingAddress.longitude",
+              "shippingAddress.postcode",
+              "shippingAddress.state",
+              "shippingAddress.suburb",
+              "shippingMethodId",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          },
+          {
+            "url": "https://kwh-kitchenwarehouse.frontastic.io/frontastic/action/checkout/details",
+            "method": "POST",
+            "resourceType": "fetch",
+            "postKeys": [
+              "customer_reference",
+              "isAnonymousUser",
+              "skipIntrospection",
+              "token"
+            ],
+            "status": 200
+          }
+        ]
+      },
+      "dispatchOrder": {
+        "note": "No payment is placed by this script, so the real Dispatch Order call is only recorded if the site makes it before the Pay step. If candidates is empty, run the same observation (no request values, URL + method + status + key names) through a real order, or inspect kwhAndFrontasticNonGetRequests.",
+        "currentPlaceholder": "/dispatch[-_]?order|api\\/.*dispatch/i",
+        "candidates": [],
+        "placeholderMatchesAnyRecordedWrite": []
+      },
+      "csp": {
+        "note": "Read from the HTTP response header of the document, not from a <meta> tag.",
+        "checkoutDocumentUrl": "https://staging.kitchenwarehouse.com.au/checkout?code=&scope=&state=",
+        "checkoutDocumentIsCheckoutPath": true,
+        "enforcedHeaderServed": false,
+        "reportOnlyHeaderServed": true,
+        "enforcedDirectives": null,
+        "reportOnlyDirectives": {
+          "default-src": {
+            "present": true,
+            "mentionsPayGoogle": false,
+            "mentionsWildcardGoogle": false
+          },
+          "script-src": {
+            "present": true,
+            "mentionsPayGoogle": true,
+            "mentionsWildcardGoogle": true
+          },
+          "frame-src": {
+            "present": true,
+            "mentionsPayGoogle": true,
+            "mentionsWildcardGoogle": false
+          },
+          "child-src": {
+            "present": true,
+            "mentionsPayGoogle": true,
+            "mentionsWildcardGoogle": false
+          },
+          "connect-src": {
+            "present": true,
+            "mentionsPayGoogle": true,
+            "mentionsWildcardGoogle": true
+          },
+          "img-src": {
+            "present": true,
+            "mentionsPayGoogle": false,
+            "mentionsWildcardGoogle": true
+          }
+        },
+        "enforcedHeader": null,
+        "reportOnlyHeader": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://www.googletagmanager.com https://*.googletagmanager.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.stackadapt.com https://qvdt3feo.com https://widgets.turnto.com https://*.turnto.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.gstatic.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://static.cloudflareinsights.com https://*.cloudflareinsights.com https://cdn.insightech.com https://*.insightech.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://*.datadoghq.com https://www.youtube.com https://www.youtube-nocookie.com https://s.yimg.com https://rts.persado.com https://sp.analytics.yahoo.com https://*.zaius.com https://*.hexagon-analytics.com https://*.facebook.com https://*.pinterest.com https://*.ocka.com.au https://omnisnippet1.com https://*.omnisnippet1.com https://*.omnisendlink.com https://*.olark.com https://*.builder.io https://*.netlify.app https://*.netlify.com https://*.useinsider.com https://connect.facebook.net https://*.pinimg.com https://bat.bing.com https://*.cfjump.com https://*.kitchenwarehouse.com.au https://*.roeye.com https://*.roeyecdn.com https://d1igp3oop3iho5.cloudfront.net http://d1igp3oop3iho5.cloudfront.net https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com http://beacon.riskified.com http://img.riskified.com https://pay.google.com https://google.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.googletagmanager.com https://*.googletagmanager.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://*.builder.io https://*.stackadapt.com https://qvdt3feo.com https://*.useinsider.com https://pay.google.com https://google.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; img-src 'self' data: blob: https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://res.cloudinary.com https://*.amazonaws.com https://*.kitchenwarehouse.com.au https://*.kitchenware.com.au https://*.ocka.com.au https://img.youtube.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.gstatic.com https://www.googletagmanager.com https://*.googletagmanager.com https://s.yimg.com https://rts.persado.com https://sp.analytics.yahoo.com https://*.zaius.com https://*.hexagon-analytics.com https://*.facebook.com https://*.pinterest.com https://*.pinimg.com https://*.olark.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.stackadapt.com https://qvdt3feo.com https://*.builder.io https://*.useinsider.com https://bat.bing.com https://*.roeye.com http://beacon.riskified.com http://img.riskified.com https://images.turnto.com https://*.turnto.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://connect.facebook.net; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com https://*.olark.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; connect-src 'self' https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://*.frontastic.rocks https://*.frontastic.live https://kwh-kitchenwarehouse.frontastic.live https://*.frontastic.io https://*.algolia.net https://*.algolianet.com https://api.mapbox.com https://*.mapbox.com https://*.zaius.com https://jumbe.zaius.com https://*.datadoghq.com https://browser-intake-ap1-datadoghq.com https://*.browser-intake-ap1-datadoghq.com https://*.hexagon-analytics.com https://google.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.google.co.in https://www.googletagmanager.com https://*.googletagmanager.com https://api.ipify.org https://rts.persado.com https://sp.analytics.yahoo.com https://omnisnippet1.com https://*.omnisnippet1.com https://*.omnisendlink.com https://*.pinterest.com https://*.stackadapt.com https://qvdt3feo.com https://widgets.turnto.com https://*.turnto.com https://*.builder.io https://*.kitchenwarehouse.com.au https://*.olark.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.netlify.app https://*.netlify.com https://*.useinsider.com https://bat.bing.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://static.cloudflareinsights.com https://*.cloudflareinsights.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://cdn.insightech.com https://*.insightech.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://pay.google.com https://google.com https://api.cloudmersive.com https://*.facebook.com https://connect.facebook.net https://www.youtube.com https://www.youtube-nocookie.com wss://*.olark.com wss://*.datadoghq.com; frame-src 'self' https://www.googletagmanager.com https://*.googletagmanager.com https://*.kitchenwarehouse.com.au https://*.pinterest.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://www.facebook.com https://*.facebook.com https://photos.pixlee.co https://www.youtube.com https://*.youtube.com https://www.youtube-nocookie.com https://*.youtube-nocookie.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://*.afterpay.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com https://pay.google.com https://google.com https://*.netlify.app https://*.netlify.com; child-src 'self' https://www.googletagmanager.com https://*.googletagmanager.com https://*.kitchenwarehouse.com.au https://*.pinterest.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://www.facebook.com https://*.facebook.com https://photos.pixlee.co https://www.youtube.com https://*.youtube.com https://www.youtube-nocookie.com https://*.youtube-nocookie.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://*.afterpay.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com https://pay.google.com https://google.com https://*.netlify.app https://*.netlify.com; media-src 'self' https://res.cloudinary.com https://cdn.builder.io https://*.kitchenwarehouse.com.au https://*.kitchenware.com.au https://*.amazonaws.com; worker-src 'self' blob:; form-action 'self' https://www.paypal.com https://paypal.com https://www.sandbox.paypal.com https://sandbox.paypal.com https://www.facebook.com https://facebook.com; report-uri https://staging.kitchenwarehouse.com.au/api/csp-report; manifest-src 'self'; object-src 'none'; base-uri 'self'",
+        "distinctPoliciesAcrossAllDocuments": [
+          {
+            "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://www.googletagmanager.com https://*.googletagmanager.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.stackadapt.com https://qvdt3feo.com https://widgets.turnto.com https://*.turnto.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.gstatic.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://static.cloudflareinsights.com https://*.cloudflareinsights.com https://cdn.insightech.com https://*.insightech.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://*.datadoghq.com https://www.youtube.com https://www.youtube-nocookie.com https://s.yimg.com https://rts.persado.com https://sp.analytics.yahoo.com https://*.zaius.com https://*.hexagon-analytics.com https://*.facebook.com https://*.pinterest.com https://*.ocka.com.au https://omnisnippet1.com https://*.omnisnippet1.com https://*.omnisendlink.com https://*.olark.com https://*.builder.io https://*.netlify.app https://*.netlify.com https://*.useinsider.com https://connect.facebook.net https://*.pinimg.com https://bat.bing.com https://*.cfjump.com https://*.kitchenwarehouse.com.au https://*.roeye.com https://*.roeyecdn.com https://d1igp3oop3iho5.cloudfront.net http://d1igp3oop3iho5.cloudfront.net https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com http://beacon.riskified.com http://img.riskified.com https://pay.google.com https://google.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.googletagmanager.com https://*.googletagmanager.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://*.builder.io https://*.stackadapt.com https://qvdt3feo.com https://*.useinsider.com https://pay.google.com https://google.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; img-src 'self' data: blob: https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://res.cloudinary.com https://*.amazonaws.com https://*.kitchenwarehouse.com.au https://*.kitchenware.com.au https://*.ocka.com.au https://img.youtube.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.gstatic.com https://www.googletagmanager.com https://*.googletagmanager.com https://s.yimg.com https://rts.persado.com https://sp.analytics.yahoo.com https://*.zaius.com https://*.hexagon-analytics.com https://*.facebook.com https://*.pinterest.com https://*.pinimg.com https://*.olark.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.stackadapt.com https://qvdt3feo.com https://*.builder.io https://*.useinsider.com https://bat.bing.com https://*.roeye.com http://beacon.riskified.com http://img.riskified.com https://images.turnto.com https://*.turnto.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://connect.facebook.net; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com https://*.olark.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; connect-src 'self' https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://*.frontastic.rocks https://*.frontastic.live https://kwh-kitchenwarehouse.frontastic.live https://*.frontastic.io https://*.algolia.net https://*.algolianet.com https://api.mapbox.com https://*.mapbox.com https://*.zaius.com https://jumbe.zaius.com https://*.datadoghq.com https://browser-intake-ap1-datadoghq.com https://*.browser-intake-ap1-datadoghq.com https://*.hexagon-analytics.com https://google.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.google.co.in https://www.googletagmanager.com https://*.googletagmanager.com https://api.ipify.org https://rts.persado.com https://sp.analytics.yahoo.com https://omnisnippet1.com https://*.omnisnippet1.com https://*.omnisendlink.com https://*.pinterest.com https://*.stackadapt.com https://qvdt3feo.com https://widgets.turnto.com https://*.turnto.com https://*.builder.io https://*.kitchenwarehouse.com.au https://*.olark.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.netlify.app https://*.netlify.com https://*.useinsider.com https://bat.bing.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://static.cloudflareinsights.com https://*.cloudflareinsights.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://cdn.insightech.com https://*.insightech.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://pay.google.com https://google.com https://api.cloudmersive.com https://*.facebook.com https://connect.facebook.net https://www.youtube.com https://www.youtube-nocookie.com wss://*.olark.com wss://*.datadoghq.com; frame-src 'self' https://www.googletagmanager.com https://*.googletagmanager.com https://*.kitchenwarehouse.com.au https://*.pinterest.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://www.facebook.com https://*.facebook.com https://photos.pixlee.co https://www.youtube.com https://*.youtube.com https://www.youtube-nocookie.com https://*.youtube-nocookie.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://*.afterpay.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com https://pay.google.com https://google.com https://*.netlify.app https://*.netlify.com; child-src 'self' https://www.googletagmanager.com https://*.googletagmanager.com https://*.kitchenwarehouse.com.au https://*.pinterest.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://www.facebook.com https://*.facebook.com https://photos.pixlee.co https://www.youtube.com https://*.youtube.com https://www.youtube-nocookie.com https://*.youtube-nocookie.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://*.afterpay.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com https://pay.google.com https://google.com https://*.netlify.app https://*.netlify.com; media-src 'self' https://res.cloudinary.com https://cdn.builder.io https://*.kitchenwarehouse.com.au https://*.kitchenware.com.au https://*.amazonaws.com; worker-src 'self' blob:; form-action 'self' https://www.paypal.com https://paypal.com https://www.sandbox.paypal.com https://sandbox.paypal.com https://www.facebook.com https://facebook.com; report-uri https://staging.kitchenwarehouse.com.au/api/csp-report; manifest-src 'self'; object-src 'none'; base-uri 'self', script-src 'unsafe-inline' 'unsafe-eval'; connect-src 'none'; report-uri https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report?m=674qD1qujoyIwcCgkBtULcTkdUPYLaSAZOEb8EFKyFs-1790958024.469266-1.0.1.1-f.gnR2W3X.mGwPnNOLGCJphQwfz0vExIakc0fhWuuI.dlQY4pF_pMkRaI.vWBdr1ndeNX6IMwwmBukz_Fk045mv_SH8oy_e_wg72ThfrrhWvaWSwml0AEi6PnxVglQevyEMcYv5lcMm665Q7ZmsbuVbWrdJ9Y_RUoC4KGWda6jPS7Bm0Sm99YUycSgIf1NQ1; report-to cf-csp-endpoint",
+            "servedOn": [
+              "https://staging.kitchenwarehouse.com.au/cart"
+            ]
+          },
+          {
+            "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://www.googletagmanager.com https://*.googletagmanager.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.stackadapt.com https://qvdt3feo.com https://widgets.turnto.com https://*.turnto.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.gstatic.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://static.cloudflareinsights.com https://*.cloudflareinsights.com https://cdn.insightech.com https://*.insightech.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://*.datadoghq.com https://www.youtube.com https://www.youtube-nocookie.com https://s.yimg.com https://rts.persado.com https://sp.analytics.yahoo.com https://*.zaius.com https://*.hexagon-analytics.com https://*.facebook.com https://*.pinterest.com https://*.ocka.com.au https://omnisnippet1.com https://*.omnisnippet1.com https://*.omnisendlink.com https://*.olark.com https://*.builder.io https://*.netlify.app https://*.netlify.com https://*.useinsider.com https://connect.facebook.net https://*.pinimg.com https://bat.bing.com https://*.cfjump.com https://*.kitchenwarehouse.com.au https://*.roeye.com https://*.roeyecdn.com https://d1igp3oop3iho5.cloudfront.net http://d1igp3oop3iho5.cloudfront.net https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com http://beacon.riskified.com http://img.riskified.com https://pay.google.com https://google.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.googletagmanager.com https://*.googletagmanager.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://*.builder.io https://*.stackadapt.com https://qvdt3feo.com https://*.useinsider.com https://pay.google.com https://google.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; img-src 'self' data: blob: https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://res.cloudinary.com https://*.amazonaws.com https://*.kitchenwarehouse.com.au https://*.kitchenware.com.au https://*.ocka.com.au https://img.youtube.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.gstatic.com https://www.googletagmanager.com https://*.googletagmanager.com https://s.yimg.com https://rts.persado.com https://sp.analytics.yahoo.com https://*.zaius.com https://*.hexagon-analytics.com https://*.facebook.com https://*.pinterest.com https://*.pinimg.com https://*.olark.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.stackadapt.com https://qvdt3feo.com https://*.builder.io https://*.useinsider.com https://bat.bing.com https://*.roeye.com http://beacon.riskified.com http://img.riskified.com https://images.turnto.com https://*.turnto.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://connect.facebook.net; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com https://*.olark.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com; connect-src 'self' https://try.abtasty.com https://ariane.abtasty.com https://*.abtasty.com https://*.frontastic.rocks https://*.frontastic.live https://kwh-kitchenwarehouse.frontastic.live https://*.frontastic.io https://*.algolia.net https://*.algolianet.com https://api.mapbox.com https://*.mapbox.com https://*.zaius.com https://jumbe.zaius.com https://*.datadoghq.com https://browser-intake-ap1-datadoghq.com https://*.browser-intake-ap1-datadoghq.com https://*.hexagon-analytics.com https://google.com https://*.google.com https://*.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.google.co.in https://www.googletagmanager.com https://*.googletagmanager.com https://api.ipify.org https://rts.persado.com https://sp.analytics.yahoo.com https://omnisnippet1.com https://*.omnisnippet1.com https://*.omnisendlink.com https://*.pinterest.com https://*.stackadapt.com https://qvdt3feo.com https://widgets.turnto.com https://*.turnto.com https://*.builder.io https://*.kitchenwarehouse.com.au https://*.olark.com https://*.riskified.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://*.netlify.app https://*.netlify.com https://*.useinsider.com https://bat.bing.com https://ad.doubleclick.net https://googleads.g.doubleclick.net https://*.doubleclick.net https://www.googleadservices.com https://*.googleadservices.com https://static.cloudflareinsights.com https://*.cloudflareinsights.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://cdn.insightech.com https://*.insightech.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://pay.google.com https://google.com https://api.cloudmersive.com https://*.facebook.com https://connect.facebook.net https://www.youtube.com https://www.youtube-nocookie.com wss://*.olark.com wss://*.datadoghq.com; frame-src 'self' https://www.googletagmanager.com https://*.googletagmanager.com https://*.kitchenwarehouse.com.au https://*.pinterest.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://www.facebook.com https://*.facebook.com https://photos.pixlee.co https://www.youtube.com https://*.youtube.com https://www.youtube-nocookie.com https://*.youtube-nocookie.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://*.afterpay.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com https://pay.google.com https://google.com https://*.netlify.app https://*.netlify.com; child-src 'self' https://www.googletagmanager.com https://*.googletagmanager.com https://*.kitchenwarehouse.com.au https://*.pinterest.com https://*.paypal.com https://*.sandbox.paypal.com https://www.sandbox.paypal.com https://*.paypalobjects.com https://wisepops.net https://*.wisepops.net https://*.wisepops.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://*.olark.com https://widgets.turnto.com https://*.turnto.com https://www.facebook.com https://*.facebook.com https://photos.pixlee.co https://www.youtube.com https://*.youtube.com https://www.youtube-nocookie.com https://*.youtube-nocookie.com https://flex.cybersource.com https://testflex.cybersource.com https://*.cybersource.com https://*.afterpay.com https://apple-pay-gateway.apple.com https://apple-pay-gateway-cert.apple.com https://applepay.cdn-apple.com https://pay.google.com https://google.com https://*.netlify.app https://*.netlify.com; media-src 'self' https://res.cloudinary.com https://cdn.builder.io https://*.kitchenwarehouse.com.au https://*.kitchenware.com.au https://*.amazonaws.com; worker-src 'self' blob:; form-action 'self' https://www.paypal.com https://paypal.com https://www.sandbox.paypal.com https://sandbox.paypal.com https://www.facebook.com https://facebook.com; report-uri https://staging.kitchenwarehouse.com.au/api/csp-report; manifest-src 'self'; object-src 'none'; base-uri 'self'",
+            "servedOn": [
+              "https://staging.kitchenwarehouse.com.au/api/auth/login?post_login_redirect_url=",
+              "https://staging.kitchenwarehouse.com.au/api/auth/kinde_callback?code=&scope=&state=",
+              "https://staging.kitchenwarehouse.com.au/checkout?code=&scope=&state="
+            ]
+          },
+          {
+            "value": "frame-ancestors 'none'",
+            "servedOn": [
+              "https://auth-staging.kitchenwarehouse.com.au/oauth2/auth?state=&client_id=&redirect_uri=&response_type=&post_login_redirect_url=&supports_reauth=&scope="
+            ]
+          }
+        ],
+        "documentsSeen": 7
+      },
+      "sdk": {
+        "extracted": {
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "gateway": "cybersource",
+              "gatewayMerchantId": "realstores"
+            }
+          ],
+          "allowedCardNetworks": [
+            "MASTERCARD",
+            "VISA"
+          ],
+          "allowedAuthMethods": [
+            "PAN_ONLY",
+            "CRYPTOGRAM_3DS"
+          ],
+          "calls": [
+            "createButton",
+            "isReadyToPay",
+            "prefetchPaymentData",
+            "loadPaymentData"
+          ],
+          "environment": "TEST",
+          "merchantInfo": {
+            "merchantId": "BCR2DN4TZKJM3J2A",
+            "merchantName": "Kitchen Warehouse Pty Ltd"
+          },
+          "isReadyToPay": {
+            "result": true
+          },
+          "transactionInfo": {
+            "totalPrice": "2875.15",
+            "currencyCode": "AUD"
+          }
+        },
+        "rawCapture": {
+          "installedAt": 1790958052921,
+          "origin": "https://staging.kitchenwarehouse.com.au",
+          "path": "/checkout",
+          "sdkAssigned": true,
+          "clientConstructed": [
+            {
+              "at": 1790958064577,
+              "args": [
+                {
+                  "environment": "TEST",
+                  "merchantInfo": {
+                    "merchantId": "BCR2DN4TZKJM3J2A",
+                    "merchantName": "Kitchen Warehouse Pty Ltd",
+                    "softwareInfo": {
+                      "id": "@google-pay/button-react",
+                      "version": "3.2.1"
+                    }
+                  },
+                  "paymentDataCallbacks": {
+                    "onPaymentDataChanged": "[function anonymous]",
+                    "onPaymentAuthorized": "[function anonymous]"
+                  }
+                }
+              ]
+            }
+          ],
+          "calls": [
+            {
+              "method": "createButton",
+              "at": 1790958064577,
+              "args": [
+                {
+                  "buttonType": "buy",
+                  "buttonColor": "black",
+                  "onClick": "[function anonymous]",
+                  "allowedPaymentMethods": [
+                    {
+                      "type": "CARD",
+                      "parameters": {
+                        "allowedAuthMethods": [
+                          "PAN_ONLY",
+                          "CRYPTOGRAM_3DS"
+                        ],
+                        "allowedCardNetworks": [
+                          "MASTERCARD",
+                          "VISA"
+                        ]
+                      },
+                      "tokenizationSpecification": {
+                        "type": "PAYMENT_GATEWAY",
+                        "parameters": {
+                          "gateway": "cybersource",
+                          "gatewayMerchantId": "realstores"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ],
+              "returned": "[Node DIV class=null]"
+            },
+            {
+              "method": "isReadyToPay",
+              "at": 1790958064579,
+              "args": [
+                {
+                  "apiVersion": 2,
+                  "apiVersionMinor": 0,
+                  "allowedPaymentMethods": [
+                    {
+                      "type": "CARD",
+                      "parameters": {
+                        "allowedAuthMethods": [
+                          "PAN_ONLY",
+                          "CRYPTOGRAM_3DS"
+                        ],
+                        "allowedCardNetworks": [
+                          "MASTERCARD",
+                          "VISA"
+                        ]
+                      },
+                      "tokenizationSpecification": {
+                        "type": "PAYMENT_GATEWAY",
+                        "parameters": {
+                          "gateway": "cybersource",
+                          "gatewayMerchantId": "realstores"
+                        }
+                      }
+                    }
+                  ],
+                  "existingPaymentMethodRequired": false
+                }
+              ],
+              "resolved": {
+                "result": true
+              }
+            },
+            {
+              "method": "prefetchPaymentData",
+              "at": 1790958064579,
+              "args": [
+                {
+                  "apiVersion": 2,
+                  "apiVersionMinor": 0,
+                  "allowedPaymentMethods": [
+                    {
+                      "type": "CARD",
+                      "parameters": {
+                        "allowedAuthMethods": [
+                          "PAN_ONLY",
+                          "CRYPTOGRAM_3DS"
+                        ],
+                        "allowedCardNetworks": [
+                          "MASTERCARD",
+                          "VISA"
+                        ]
+                      },
+                      "tokenizationSpecification": {
+                        "type": "PAYMENT_GATEWAY",
+                        "parameters": {
+                          "gateway": "cybersource",
+                          "gatewayMerchantId": "realstores"
+                        }
+                      }
+                    }
+                  ],
+                  "merchantInfo": {
+                    "merchantId": "BCR2DN4TZKJM3J2A",
+                    "merchantName": "Kitchen Warehouse Pty Ltd",
+                    "softwareInfo": {
+                      "id": "@google-pay/button-react",
+                      "version": "3.2.1"
+                    }
+                  },
+                  "transactionInfo": {
+                    "totalPriceStatus": "FINAL",
+                    "totalPriceLabel": "Total",
+                    "totalPrice": "2875.15",
+                    "currencyCode": "AUD",
+                    "countryCode": "AU"
+                  },
+                  "callbackIntents": [
+                    "SHIPPING_ADDRESS",
+                    "PAYMENT_AUTHORIZATION"
+                  ],
+                  "shippingAddressRequired": true,
+                  "shippingAddressParameters": {
+                    "allowedCountryCodes": [
+                      "AU",
+                      "NZ",
+                      "SG",
+                      "IN"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "method": "loadPaymentData",
+              "at": 1790958064844,
+              "args": [
+                {
+                  "apiVersion": 2,
+                  "apiVersionMinor": 0,
+                  "allowedPaymentMethods": [
+                    {
+                      "type": "CARD",
+                      "parameters": {
+                        "allowedAuthMethods": [
+                          "PAN_ONLY",
+                          "CRYPTOGRAM_3DS"
+                        ],
+                        "allowedCardNetworks": [
+                          "MASTERCARD",
+                          "VISA"
+                        ]
+                      },
+                      "tokenizationSpecification": {
+                        "type": "PAYMENT_GATEWAY",
+                        "parameters": {
+                          "gateway": "cybersource",
+                          "gatewayMerchantId": "realstores"
+                        }
+                      }
+                    }
+                  ],
+                  "merchantInfo": {
+                    "merchantId": "BCR2DN4TZKJM3J2A",
+                    "merchantName": "Kitchen Warehouse Pty Ltd",
+                    "softwareInfo": {
+                      "id": "@google-pay/button-react",
+                      "version": "3.2.1"
+                    }
+                  },
+                  "transactionInfo": {
+                    "totalPriceStatus": "FINAL",
+                    "totalPriceLabel": "Total",
+                    "totalPrice": "2875.15",
+                    "currencyCode": "AUD",
+                    "countryCode": "AU"
+                  },
+                  "callbackIntents": [
+                    "SHIPPING_ADDRESS",
+                    "PAYMENT_AUTHORIZATION"
+                  ],
+                  "shippingAddressRequired": true,
+                  "shippingAddressParameters": {
+                    "allowedCountryCodes": [
+                      "AU",
+                      "NZ",
+                      "SG",
+                      "IN"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "paymentRequest": {
+            "presentAtInstall": true,
+            "constructed": []
+          },
+          "sdkShapeAtLoad": null,
+          "errors": []
+        }
+      },
+      "paymentRequestRemoval": {
+        "recordedByInitScript": {
+          "removedAt": 1790958052921,
+          "path": "/checkout",
+          "hadPaymentRequestBefore": true,
+          "method": "delete",
+          "stillInWindow": false,
+          "typeofAfter": "undefined",
+          "errors": []
+        },
+        "nowInWindow": false,
+        "nowTypeof": "undefined",
+        "nowValueIsUndefined": true
+      },
+      "surface": {
+        "verdict": "payframe-present-but-not-sized-or-hidden",
+        "automatable": null,
+        "explanation": "payframe present: true; sized and displayed: false; sheet signals in its text/buttons: false; PaymentRequest.show() called: false; loadPaymentData outcome: pending-at-end-of-window.",
+        "clickError": null,
+        "watchWindowMs": 20000,
+        "popupOrNewPageCount": 1,
+        "googlePayFrameCount": 1,
+        "surfaces": [
+          {
+            "kind": "popup",
+            "openedVia": [
+              "context.on('page')",
+              "page.on('popup')"
+            ],
+            "url": "https://accounts.google.com/v3/signin/accountchooser?continue=&flowName=&flowEntry=&dsh=",
+            "title": "Sign in - Google Accounts",
+            "bodyTextLength": 151,
+            "visibleButtonCount": 1,
+            "contentAppeared": true,
+            "screenshot": "screenshots\\gpay-capture\\2026-10-02\\no-payment-request-popup-1.png"
+          },
+          {
+            "kind": "frame",
+            "url": "https://pay.google.com/gp/p/ui/payframe?origin=&mid=",
+            "isPayframe": true,
+            "iframeBox": null,
+            "iframeStyle": {
+              "display": "none",
+              "visibility": "hidden",
+              "opacity": "1",
+              "width": 0,
+              "height": 0,
+              "intersectsViewport": false
+            },
+            "title": "",
+            "bodyTextLength": 1155,
+            "visibleButtonCount": 0,
+            "contentAppeared": true,
+            "textSignals": {
+              "cardNumberShaped": false,
+              "maskedCardTail": false,
+              "containsPay": false,
+              "containsContinue": false,
+              "containsEmailShapedText": false
+            },
+            "payOrContinueButtonCount": 0,
+            "screenshot": "screenshot failed: elementHandle.screenshot: Timeout 8000ms exceeded.",
+            "fallbackViewportScreenshot": "screenshots\\gpay-capture\\2026-10-02\\no-payment-request-frame-1-viewport.png"
+          }
+        ],
+        "paymentRequestConstructedCount": 0,
+        "paymentRequestShowCalled": false,
+        "loadPaymentDataCalled": true,
+        "loadPaymentDataOutcome": "pending-at-end-of-window",
+        "loadPaymentDataDetail": {
+          "threw": null,
+          "rejected": null
+        },
+        "payframe": {
+          "kind": "frame",
+          "url": "https://pay.google.com/gp/p/ui/payframe?origin=&mid=",
+          "isPayframe": true,
+          "iframeBox": null,
+          "iframeStyle": {
+            "display": "none",
+            "visibility": "hidden",
+            "opacity": "1",
+            "width": 0,
+            "height": 0,
+            "intersectsViewport": false
+          },
+          "title": "",
+          "bodyTextLength": 1155,
+          "visibleButtonCount": 0,
+          "contentAppeared": true,
+          "textSignals": {
+            "cardNumberShaped": false,
+            "maskedCardTail": false,
+            "containsPay": false,
+            "containsContinue": false,
+            "containsEmailShapedText": false
+          },
+          "payOrContinueButtonCount": 0,
+          "screenshot": "screenshot failed: elementHandle.screenshot: Timeout 8000ms exceeded.",
+          "fallbackViewportScreenshot": "screenshots\\gpay-capture\\2026-10-02\\no-payment-request-frame-1-viewport.png"
+        },
+        "allFramesAfterClick": [
+          {
+            "main": true,
+            "url": "https://staging.kitchenwarehouse.com.au/checkout?code=&scope=&state="
+          },
+          {
+            "main": false,
+            "url": "nullblank"
+          },
+          {
+            "main": false,
+            "url": "https://tagmanager.kitchenwarehouse.com.au/_/service_worker/69f0/sw_iframe.html?origin=&1p="
+          },
+          {
+            "main": false,
+            "url": "https://pay.google.com/gp/p/ui/payframe?origin=&mid="
+          },
+          {
+            "main": false,
+            "url": "https://www.sandbox.paypal.com/smart/buttons?style.layout=&style.color=&style.shape=&style.tagline=&style.menuPlacement=&style.shouldApplyRebrandedStyles=&style.isButtonColorABTestMerchant=&style.isPayNowOrLaterLabelEligible=&style.shouldApplyPayNowOrLaterLabel=&style.brandVersion=&browser_context=&allowBillingPayments=&applePaySupport=&buttonSessionID=&buttonSize=&customerId=&clientID=&clientMetadataID=&commit=&components.0=&currency=&debug=&disableSetCookie=&eagerOrderCreation=&env=&experiment.enableVenmo=&experiment.venmoDesktopQRCodeEnhancements=&experiment.venmoVaultWithoutPurchase=&experiment.spbEagerOrderCreation=&experiment.venmoWebEnabled=&experiment.isWebViewEnabled=&experiment.isPaypalRebrandABTestEnabled=&experiment.defaultBlueButtonColor=&experiment.isEdgeCacheStaleEnabled=&experiment.isJunoCircuitBreakerEnabled=&experiment.venmoEnableWebOnNonNativeBrowser=&experiment.paypalCreditButtonCreateVaultSetupTokenExists=&experiment.isPaylaterCobrandedLabelEnabled=&experiment.isPaylaterCobrandedLabelRandomizationEnabled=&experiment.isBfcacheEnabled=&experiment.isStaticFallbackBundleEnabled=&experiment.isForceStaticFallbackBundleEnabled=&experiment.paypalRebrand=&flow=&fundingEligibility=&intent=&jsSdkLibrary=&locale.country=&locale.lang=&hasShippingCallback=&platform=&renderedButtons.0=&renderedButtons.1=&sessionID=&sdkCorrelationID=&sdkMeta=&sdkVersion=&storageID=&buttonColor.shouldApplyRebrandedStyles=&buttonColor.color=&buttonColor.isButtonColorABTestMerchant=&buttonColor.brandVersion=&supportedNativeBrowser=&supportedNativeVenmoBrowser=&supportsPopups=&supportsVenmoPopups=&sdkSource=&vault=&userAgent="
+          },
+          {
+            "main": false,
+            "url": "nullblank"
+          }
+        ],
+        "operatorSawSheet": null
+      }
+    }
+  ]
+}
