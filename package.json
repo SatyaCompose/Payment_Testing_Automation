@@ -21,6 +21,7 @@
     "codegen": "playwright codegen",
     "install-browsers": "playwright install --with-deps",
     "auth:setup": "tsx tests/scripts/interactive-signin.ts",
+    "gpay:capture": "tsx tests/scripts/capture-gpay-integration.ts",
     "runner:install": "npm --prefix runner install",
     "runner:dev": "npm --prefix runner run dev",
     "runner:build": "npm --prefix runner run build",
