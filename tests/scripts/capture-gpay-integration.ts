@@ -1116,13 +1116,40 @@ async function runCapture(mode: Mode, shotDir: string): Promise<RunResult> {
     let verdict: string;
     let automatable: boolean | null;
     let explanation: string;
-    if (surfaces.length > 0) {
-      const kinds = [...new Set(surfaces.map((s) => String(s.kind)))].join(' + ');
-      verdict = hasContent ? `dom-surface (${kinds}) with content` : `dom-surface (${kinds}) but EMPTY`;
+    // A pay.google.com frame EXISTING does not make the sheet automatable.
+    // Measured 2026-10-02: a run with two such frames was still the native
+    // path — one was `generate_gpay_btn_img` (the button's image, 240x40)
+    // and the other the `payframe` helper at display:none, 0x0. The sheet
+    // itself was drawn by Chrome. So PaymentRequest.show() is checked FIRST:
+    // once the browser has drawn the sheet, whatever frames are also on the
+    // page are helpers, not the surface. Then a DOM surface only counts as
+    // driveable if it is actually rendered — content AND, for a frame, a
+    // real box. An earlier version returned automatable:true on frame
+    // presence alone and wrote that wrong verdict into docs/gpay/.
+    const driveableSurface = surfaces.find((s) => {
+      if (s.contentAppeared !== true || !(Number(s.bodyTextLength) > 0)) return false;
+      if (s.kind !== 'frame') return true; // a popup Page is driveable as-is
+      const box = s.iframeBox as { width?: number; height?: number } | null;
+      return !!box && Number(box.width) > 0 && Number(box.height) > 0;
+    });
+    if (prShowCalled) {
+      verdict = 'native-payment-request';
+      automatable = false;
+      explanation =
+        surfaces.length > 0
+          ? `The page called PaymentRequest.show(), so Chrome drew the sheet itself, outside the DOM. The ${surfaces.length} pay.google.com frame(s) present are the SDK's helpers (button image, hidden payframe), not the sheet - their presence does not make it driveable.`
+          : 'No popup and no pay.google.com frame, but the page called PaymentRequest.show(): Chrome draws that sheet itself, outside the DOM.';
+    } else if (driveableSurface) {
+      verdict = `dom-surface (${String(driveableSurface.kind)}) with content`;
       automatable = true;
+      explanation = 'A page/frame appeared, is actually rendered, and has content - so Playwright can read and drive it.';
+    } else if (surfaces.length > 0) {
+      const kinds = [...new Set(surfaces.map((s) => String(s.kind)))].join(' + ');
+      verdict = `dom-surface (${kinds}) present but NOT driveable`;
+      automatable = false;
       explanation = hasContent
-        ? 'A real page/frame appeared and rendered content, so Playwright can read and drive it.'
-        : 'A page/frame appeared but rendered no text within 10s - consistent with the "buttonCount: 0" claim. It is still DOM, but there is nothing in it to click.';
+        ? 'A page/frame appeared with content, but it is not rendered (hidden, or zero-sized), so there is nothing on screen to click.'
+        : 'A page/frame appeared but rendered no text and is not displayed - a helper frame, not a sheet.';
     } else if (prShowCalled) {
       verdict = 'native-payment-request';
       automatable = false;
