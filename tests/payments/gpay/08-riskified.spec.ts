@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures';
+import { requireGpayMode } from './guard';
 import type { CheckoutFlowConfig } from '../../flows/CheckoutFlow';
 
 /**
@@ -8,6 +9,8 @@ import type { CheckoutFlowConfig } from '../../flows/CheckoutFlow';
  * captured to assert Riskified fingerprinting ran.
  */
 test.describe('GP · Riskified · Dispatch Order failure & retry', () => {
+  test.beforeEach(() => requireGpayMode());
+
   test('8.1 Blocking dispatch order fails Google Pay, unblock and retry succeeds', async ({
     page,
     flow,

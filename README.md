@@ -137,6 +137,8 @@ Full list in `.env.example`. Highlights:
 | `PAYPAL_SANDBOX_*`                      | PayPal sandbox buyer                                               |
 | `AFTERPAY_SANDBOX_*`                    | Afterpay sandbox buyer                                             |
 | `APPLEPAY_EMAIL` / `APPLEPAY_PASSWORD`  | Apple Pay test buyer                                               |
+| `GPAY_MODE`                             | `off` (default, Google Pay tests skip) / `manual` (human clicks Pay in popup) / `auto` (reserved, same as manual) |
+| `GPAY_MANUAL_TIMEOUT_MS`                | How long a `manual` run waits for the Pay click (default 180000)   |
 | `PROMO_CODE`                            | Promo used in spec 6.1                                             |
 | `GIFT_CARD_SHEET_ID` / `_GID`           | Source sheet (defaults set)                                        |
 | `GIFT_CARD_NUMBER` / `GIFT_CARD_PIN`    | Fallback if sheet fetch fails                                      |
@@ -159,7 +161,7 @@ Four Playwright projects in `playwright.config.ts`:
 | `mobile-safari`   | WebKit (iPhone 14)      | iOS Safari                     |
 | `android-chrome`  | Chromium (Pixel 7)      | Android Chrome                 |
 
-Playwright uses the **WebKit** and **Chromium** engines — not the real Safari or Chrome binaries. Fine for CI regression, but confirm real-Safari and real-Chrome-on-Windows bugs on actual devices. Google Pay's full flow requires real Chrome + real device; CI asserts the pay sheet surfaces.
+Playwright uses the **WebKit** and **Chromium** engines — not the real Safari or Chrome binaries. Fine for CI regression, but confirm real-Safari and real-Chrome-on-Windows bugs on actual devices. Google Pay tests skip by default (`GPAY_MODE=off`); in `manual` mode a human must click Pay in Google's popup. Nothing in the suite currently asserts the pay sheet surfaces.
 
 There is no Playwright `setup` project — `globalSetup` checks the saved session is genuinely signed in, and every project loads `tests/.auth/user.json` as `storageState` via the `sharedContext` fixture.
 
@@ -238,6 +240,7 @@ Three subagents live in `.claude/agents/`:
 - **PayPal popup closes too fast** → sandbox is slow (30–45s). Timeouts are generous — retry the run.
 - **Afterpay "amount exceeds plan"** → sandbox plan cap is ~AUD 2000.
 - **Google Pay fails on WebKit** → expected. The gpay spec skips WebKit automatically.
+- **Google Pay tests all skip** → expected unless `GPAY_MODE=manual` is set. In manual mode a human must click Pay in Google's popup within `GPAY_MANUAL_TIMEOUT_MS`, otherwise the test fails saying the click never completed.
 - **Runner UI shows no events** → check the Express server logs. The `__UI__:` prefix must survive Playwright's stdout formatting; if a custom Playwright plugin munges output, the reporter's lines can get dropped.
 
 ---

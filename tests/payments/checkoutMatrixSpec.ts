@@ -58,6 +58,10 @@ function registerRow(args: {
     if (method.envGuard && !process.env[method.envGuard]) {
       test.skip(true, `${method.envGuard} not set`);
     }
+    const methodSkipReason = method.skipReason?.();
+    if (methodSkipReason) {
+      test.skip(true, methodSkipReason);
+    }
     if (user.envGuard && !process.env[user.envGuard]) {
       test.skip(true, `${user.envGuard} not set`);
     }

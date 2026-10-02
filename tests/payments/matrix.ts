@@ -4,6 +4,7 @@ import type {
   ShippingRegion,
   UserType,
 } from '../fixtures/testData';
+import { gpaySkipReason } from './gpay/guard';
 
 /**
  * Single source of truth for the checkout happy-path test matrix.
@@ -135,6 +136,10 @@ export interface PaymentMethodDescriptor {
   /** Env var that must be present for this method to run — auto-skip
    *  when absent (e.g. PAYPAL_SANDBOX_EMAIL for PayPal). */
   envGuard?: string;
+  /** Richer guard for gates that are not a bare env-var-presence check.
+   *  Returns a skip reason, or undefined to run. Evaluated at test run
+   *  time, after `envGuard`. */
+  skipReason?: () => string | undefined;
   /** Minimum cart total AUD required by the provider. Afterpay refuses
    *  orders < $100, so the flow must add products until the total
    *  clears this threshold before Place Order becomes enabled. */
@@ -145,7 +150,7 @@ export const PAYMENT_METHODS: Record<PaymentMethod, PaymentMethodDescriptor> = {
   'credit-card': { method: 'credit-card', shortLabel: 'CC', longLabel: 'Credit Card', folderSlug: 'cc' },
   paypal: { method: 'paypal', shortLabel: 'PP', longLabel: 'PayPal', folderSlug: 'pp', envGuard: 'PAYPAL_SANDBOX_EMAIL' },
   afterpay: { method: 'afterpay', shortLabel: 'AP', longLabel: 'Afterpay', folderSlug: 'ap', envGuard: 'AFTERPAY_SANDBOX_EMAIL', minCartTotalAud: 100 },
-  gpay: { method: 'gpay', shortLabel: 'GP', longLabel: 'Google Pay', folderSlug: 'gp', skipBrowsers: ['webkit'] },
+  gpay: { method: 'gpay', shortLabel: 'GP', longLabel: 'Google Pay', folderSlug: 'gp', skipBrowsers: ['webkit'], skipReason: gpaySkipReason },
   applepay: { method: 'applepay', shortLabel: 'AP-A', longLabel: 'Apple Pay', folderSlug: 'apay' },
 };
 

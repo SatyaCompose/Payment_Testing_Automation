@@ -443,11 +443,11 @@ export async function payWithAfterpay(page: Page, email: string, password: strin
  */
 /**
  * Semi-automated Google Pay: the test drives everything up to opening
- * the Google Pay popup. Because Google's SDK refuses to populate the
- * sheet under Playwright automation (verified: pay.google.com iframes
- * stay empty for 97+ seconds even with stealth), a human clicks the
- * blue "Pay" button in the popup manually. The helper then waits up
- * to 3 minutes for the KWH page to navigate away from /checkout —
+ * the Google Pay popup. A human clicks the blue "Pay" button in the
+ * popup manually (no automated Pay click exists; whether the sheet
+ * renders under automation is an open question, see
+ * tests/payments/gpay/MANUAL.md). The helper then waits up to
+ * GPAY_MANUAL_TIMEOUT_MS (default 3 minutes) for the KWH page to navigate away from /checkout —
  * that navigation is the signal Google's success handler fired and
  * KWH's frontend has proceeded to order placement.
  *
@@ -604,12 +604,13 @@ export async function payWithGooglePay(page: Page): Promise<void> {
   }
 
   console.log(`[GPay] element at click point: ${top}`);
-  console.log('[GPay] clicking .gpay-button.buy — waiting for MANUAL Pay click in popup (up to 3 min)');
+  const manualTimeoutMs = Number(process.env.GPAY_MANUAL_TIMEOUT_MS) > 0 ? Number(process.env.GPAY_MANUAL_TIMEOUT_MS) : 180_000;
+  console.log(`[GPay] clicking .gpay-button.buy — waiting for MANUAL Pay click in popup (up to ${manualTimeoutMs}ms)`);
   await gpayButton.click();
 
   // Heartbeat: every 10s log the page URL + any visible errors so we
   // can see progress (or lack of) in real time.
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + manualTimeoutMs;
   const heartbeat = (async () => {
     while (Date.now() < deadline) {
       await page.waitForTimeout(10_000).catch(() => undefined);
@@ -639,24 +640,39 @@ export async function payWithGooglePay(page: Page): Promise<void> {
     }
   })();
 
-  // Wait up to 3 minutes for the manual Pay click to complete. Two
+  // Wait up to manualTimeoutMs for the manual Pay click to complete. Two
   // signals: the URL navigates away from /checkout, OR confirmation
   // text renders on the page. Whichever fires first, we return and let
-  // the outer flow assert the full confirmation page.
+  // the outer flow assert the full confirmation page. If neither fires
+  // we throw here, naming the real cause, instead of returning and
+  // letting a vaguer failure surface later in OrderConfirmationPage.
+  let paid = false;
   await Promise.race([
     heartbeat,
     page
       .waitForURL((url) => !/\/checkout(?:\?|$|\/)/i.test(url.toString()), {
-        timeout: 180_000,
+        timeout: manualTimeoutMs,
       })
-      .then(() => console.log(`[GPay] URL navigated: ${page.url()}`))
+      .then(() => {
+        paid = true;
+        console.log(`[GPay] URL navigated: ${page.url()}`);
+      })
       .catch(() => undefined),
     page
       .getByText(/thank you for your order|order confirmed|order complete|order successfully|CT-\d+/i)
       .first()
-      .waitFor({ state: 'visible', timeout: 180_000 })
-      .then(() => console.log('[GPay] confirmation text visible'))
+      .waitFor({ state: 'visible', timeout: manualTimeoutMs })
+      .then(() => {
+        paid = true;
+        console.log('[GPay] confirmation text visible');
+      })
       .catch(() => undefined),
   ]);
+  if (!paid) {
+    throw new Error(
+      `Google Pay: the manual Pay click in Google's popup did not complete within ${manualTimeoutMs}ms ` +
+        `(the page never left /checkout and no confirmation text appeared). Final URL: ${page.isClosed() ? 'page closed' : page.url()}`,
+    );
+  }
   console.log(`[GPay] === exiting payWithGooglePay, final URL=${page.url()} ===`);
 }

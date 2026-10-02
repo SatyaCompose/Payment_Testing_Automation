@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures';
+import { requireGpayMode } from './guard';
 import { getFirstAvailableGiftCard } from '../../utils/giftCards';
 import { GIFT_CARD_MAX_AUD } from '../../fixtures/testData';
 
@@ -6,6 +7,8 @@ import { GIFT_CARD_MAX_AUD } from '../../fixtures/testData';
 const CART_MIN_AUD = GIFT_CARD_MAX_AUD;
 
 test.describe('GP · Discounts', () => {
+  test.beforeEach(() => requireGpayMode());
+
   test('6.1 Apply promo code, pay with Google Pay', async ({ flow, browserName }, testInfo) => {
     test.skip(browserName === 'webkit', 'Google Pay is not supported on WebKit');
     test.skip(!process.env.PROMO_CODE, 'PROMO_CODE not set');

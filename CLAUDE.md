@@ -25,7 +25,7 @@ tests/
     credit-card/          # reference implementation — 8 spec files, 21 tests
     paypal/               # (TBD — mirror credit-card/)
     afterpay/             # (TBD)
-    gpay/                 # (TBD)
+    gpay/                 # matrix specs + 06/08 bespoke; skipped unless GPAY_MODE=manual (see MANUAL.md)
     applepay/             # (TBD)
   pages/                  # Page Object Model
   flows/CheckoutFlow.ts   # composed cart → checkout → shipping → payment helper
@@ -46,7 +46,7 @@ you", never a password field — so there is no email/password login on Kinde.
 `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` are the Google account used for:
 - Google SSO — handled by the saved session's Google cookies from `npm run auth:setup`; no scripted login runs during tests (`loginWithGoogle()` in `LoginPage` is dead code)
 - Safari SSO
-- **Google Pay** — the buyer account is the same
+- **Google Pay** — the buyer account is the same. Google Pay tests skip unless `GPAY_MODE=manual` (or the reserved `auto`, currently identical): a human must click Pay in Google's popup. `GPAY_MANUAL_TIMEOUT_MS` sets how long the test waits (default 180000)
 
 Sign-in (`npm run auth:setup`) is a manual step — a real Chrome window opens and you complete it yourself; it is not scripted. The session is saved only once sign-in genuinely completes — a failed or abandoned attempt leaves any previously saved session untouched, and a run will fail closed with a clear message rather than silently testing as a guest.
 

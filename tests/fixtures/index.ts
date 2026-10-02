@@ -22,8 +22,9 @@ import { CURSOR_OVERLAY_SCRIPT } from '../utils/cursorOverlay';
 
 // Register the stealth plugin once — patches ~15 anti-automation
 // detection surfaces (webdriver flag, WebGL fingerprint, plugin list,
-// chrome runtime, permissions API, etc.). Enables Google Pay's SDK to
-// render its sheet contents under Playwright automation.
+// chrome runtime, permissions API, etc.). Intended to help Google Pay's
+// SDK render its sheet under Playwright automation; that effect has not
+// been measured (see tests/payments/gpay/MANUAL.md).
 //
 // `user-agent-override` is disabled on purpose. That evasion's
 // `onPageCreated` hook calls CDP `Network.setUserAgentOverride` with a
@@ -44,11 +45,10 @@ import { CURSOR_OVERLAY_SCRIPT } from '../utils/cursorOverlay';
 // evasion exists to strip — meaning it protects against nothing our own
 // context-level `userAgent` doesn't already handle. Trade-off: with the
 // evasion off, `navigator.userAgentData` may no longer be rewritten to
-// agree with a spoofed UA. Accepted — Google Pay's sheet is already
-// undriveable under automation and its specs are skipped (see
-// tests/payments/gpay/MANUAL.md), so this evasion wasn't buying a
-// working GPay path anyway, while a correct UA is required for both
-// session validity and honest mobile emulation. Do not re-enable this
+// agree with a spoofed UA. Accepted — a correct UA is required for both
+// session validity and honest mobile emulation. Whether this evasion
+// affects Google Pay's sheet rendering has not been measured (open
+// question, see tests/payments/gpay/MANUAL.md). Do not re-enable this
 // without re-measuring both projects' `navigator.userAgent`.
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
@@ -78,7 +78,7 @@ interface WorkerFixtures {
    * plugin). Only initialised when the current project targets chromium
    * or android-chrome; other browsers fall back to Playwright's default
    * `browser` fixture. Google Pay's SDK checks ~15 fingerprint surfaces
-   * that stealth patches, letting the sheet render under automation.
+   * that stealth patches; whether that lets the sheet render is unmeasured.
    */
   stealthBrowser: Browser | null;
 }
